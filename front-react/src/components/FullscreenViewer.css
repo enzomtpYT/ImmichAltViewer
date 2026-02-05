@@ -1,0 +1,237 @@
+.fullscreen-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fullscreen-container {
+  max-width: 95vw;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: zoomIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fullscreen-image {
+  max-width: 100%;
+  max-height: 85vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+}
+
+.close-btn {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10000;
+  font-family: Arial, sans-serif;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(90deg) scale(1.1);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3);
+}
+
+.nav-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 1.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10000;
+  font-family: Arial, sans-serif;
+  line-height: 1;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3);
+}
+
+.nav-btn-left {
+  left: 2rem;
+}
+
+.nav-btn-right {
+  right: 2rem;
+}
+
+.fullscreen-info {
+  margin-top: 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: slideUp 0.5s ease-out 0.2s backwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.info-content {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.image-counter {
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 80px;
+}
+
+.image-date,
+.image-id {
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.image-id {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.fullscreen-hint {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 0.75rem 1.5rem;
+  border-radius: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: fadeIn 0.5s ease-out 0.5s backwards;
+  text-align: center;
+}
+
+.fullscreen-hint kbd {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  margin: 0 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+  .close-btn {
+    top: 1rem;
+    right: 1rem;
+    width: 40px;
+    height: 40px;
+    font-size: 1.25rem;
+  }
+
+  .nav-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 1.5rem;
+  }
+
+  .nav-btn-left {
+    left: 1rem;
+  }
+
+  .nav-btn-right {
+    right: 1rem;
+  }
+
+  .fullscreen-image {
+    max-height: 75vh;
+  }
+
+  .fullscreen-info {
+    padding: 0.75rem 1.5rem;
+  }
+
+  .info-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .fullscreen-hint {
+    bottom: 1rem;
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+  }
+}
+

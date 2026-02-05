@@ -1,0 +1,170 @@
+.date-slider {
+  position: fixed;
+  right: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 120px;
+  max-height: 80vh;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  z-index: 100;
+  animation: slideInRight 0.4s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.date-slider-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--glass-border);
+  text-align: center;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.date-slider-header h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.date-count {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.date-slider-content {
+  overflow-y: auto;
+  max-height: calc(80vh - 80px);
+  padding: 0.5rem;
+}
+
+.date-slider-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.date-slider-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.date-slider-content::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 2px;
+}
+
+.date-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  color: var(--text-muted);
+}
+
+.date-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  transform: translateX(-2px);
+}
+
+.date-item.selected {
+  background: var(--primary-glow);
+  color: var(--text-main);
+}
+
+.date-marker {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  opacity: 0.5;
+}
+
+.date-item:hover .date-marker,
+.date-item.selected .date-marker {
+  width: 8px;
+  height: 8px;
+  background: var(--primary);
+  opacity: 1;
+  box-shadow: 0 0 8px var(--primary);
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 0.125rem;
+}
+
+.date-day {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.date-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  background: none;
+  -webkit-text-fill-color: initial;
+  line-height: 1;
+}
+
+.date-month {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.date-photo-count {
+  font-size: 0.65rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+  opacity: 0.6;
+}
+
+@media (max-width: 1024px) {
+  .date-slider {
+    right: 1rem;
+    width: 100px;
+  }
+
+  .date-slider-header h3 {
+    font-size: 0.85rem;
+  }
+
+  .date-number {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .date-slider {
+    display: none;
+  }
+}

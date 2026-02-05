@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  immich-viewer:
+    build: .
+    ports:
+      - "8090:8000"
+    restart: unless-stopped
+    container_name: immich-viewer
+    env_file:
+      - .env
+    # Add extra_hosts to allow connecting to host services (like Immich) if running locally
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

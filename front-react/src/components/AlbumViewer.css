@@ -1,0 +1,260 @@
+.container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding-right: 140px; /* Reserve space for DateSlider */
+}
+
+.header {
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  padding: 1.5rem 2rem;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+h1 {
+  color: var(--text-main);
+  font-size: 1.8rem;
+  margin: 0;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+h1::before {
+  content: '📸';
+  font-size: 1.8rem;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.search-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.search-box {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 800px;
+}
+
+.input {
+  flex: 1;
+  min-width: 150px;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.api-key-input {
+  flex: 0.6;
+}
+
+.album-id-input {
+  flex: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0 4px 12px var(--primary-glow);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px var(--primary-glow);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.stats-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+}
+
+.stats {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 1.5rem;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner.small {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 0.75rem;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  text-align: center;
+  padding: 1.5rem;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.observer-target {
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.loading-more {
+  text-align: center;
+  color: var(--text-muted);
+  animation: fadeIn 0.3s ease-in;
+}
+
+.end-message {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 900px) {
+  .container {
+    padding-right: 0;
+  }
+  
+  .header {
+    padding: 1.5rem;
+  }
+  
+  .header-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .search-container {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .search-box {
+    flex-direction: column;
+  }
+  
+  .input {
+    width: 100%;
+  }
+
+  .stats-bar {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+}
+
+
