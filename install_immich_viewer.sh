@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 INSTALL_DIR="/opt/immich-viewer"
-REPO_URL="https://github.com/enzomtp/ImmichViewByDateuploaded.git" # Replace if this is a real public repo, otherwise we assume local copy or user provides it. 
+REPO_URL="https://github.com/enzomtp/ImmichAltViewer.git" # Replace if this is a real public repo, otherwise we assume local copy or user provides it. 
 # Since we are generating this for the user to use LOCALLY likely, I will assume they might want to download the current state or clone. 
 # For now, I will assume they might copy this script into the project root or curl it.
 # If this is to be a standalone downloader, we need a valid git URL.
