@@ -2,7 +2,7 @@
 
 A modern, high-performance external viewer for [Immich](https://immich.app/) that focuses on browsing your library by **Date Uploaded** rather than Date Taken.
 
-Repository: [ImmichAltViewer](https://github.com/enzomtp/ImmichAltViewer)
+Repository: [ImmichAltViewer](https://github.com/enzomtpYT/ImmichAltViewer)
 
 > [!CAUTION]
 > **⚠️ VIBECODED WARNING**
