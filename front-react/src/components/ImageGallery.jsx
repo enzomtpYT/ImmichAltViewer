@@ -1,9 +1,10 @@
+import { useMemo } from 'react';
 import ImageCard from './ImageCard';
 import './ImageGallery.css';
 
 function ImageGallery({ assets, apiKey, onFullscreen }) {
-  // Group assets by day
-  const groupByDay = (assets) => {
+  // Group assets by day - Memoized for performance
+  const groupedAssets = useMemo(() => {
     const groups = [];
     let currentDate = null;
     let currentGroup = [];
@@ -28,15 +29,13 @@ function ImageGallery({ assets, apiKey, onFullscreen }) {
       }
     });
 
-    // Add the last group
     if (currentGroup.length > 0) {
       groups.push({ date: currentDate, assets: currentGroup });
     }
 
     return groups;
-  };
+  }, [assets]);
 
-  const groupedAssets = groupByDay(assets);
 
   return (
     <div>

@@ -42,7 +42,8 @@
   }
 }
 
-.fullscreen-image {
+.fullscreen-image,
+.fullscreen-video {
   max-width: 100%;
   max-height: 85vh;
   width: auto;
@@ -51,6 +52,12 @@
   border-radius: 12px;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
 }
+
+.fullscreen-video {
+  background: #000;
+  outline: none;
+}
+
 
 .close-btn {
   position: fixed;
@@ -160,7 +167,7 @@
 }
 
 .image-id {
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
 }
@@ -185,7 +192,7 @@
   background: rgba(255, 255, 255, 0.2);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-size: 0.85rem;
   margin: 0 0.25rem;
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -200,32 +207,37 @@
     font-size: 1.25rem;
   }
 
+  /* Hide nav buttons on mobile - use swipe instead */
   .nav-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 1.5rem;
+    display: none;
   }
 
-  .nav-btn-left {
-    left: 1rem;
-  }
-
-  .nav-btn-right {
-    right: 1rem;
-  }
-
-  .fullscreen-image {
-    max-height: 75vh;
+  .fullscreen-image,
+  .fullscreen-video {
+    max-height: 70vh;
+    border-radius: 8px;
   }
 
   .fullscreen-info {
-    padding: 0.75rem 1.5rem;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    width: 90%;
   }
 
   .info-content {
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem 1.5rem;
+    align-items: center;
+  }
+
+  .image-id {
+    display: none; /* Hide ID on mobile to save space */
+  }
+
+  .image-counter {
+    min-width: auto;
   }
 
   .fullscreen-hint {
@@ -233,5 +245,18 @@
     font-size: 0.75rem;
     padding: 0.5rem 1rem;
   }
+
+  .desktop-hint {
+    display: none;
+  }
+
+  .mobile-hint {
+    display: block;
+  }
 }
 
+@media (min-width: 769px) {
+  .mobile-hint {
+    display: none;
+  }
+}
