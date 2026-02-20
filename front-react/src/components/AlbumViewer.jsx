@@ -6,11 +6,25 @@ import './AlbumViewer.css';
 
 const API_URL = ''; // Relative URL for production
 const IMMICH_URL = 'http://192.168.1.110:2283';
-const ITEMS_PER_PAGE = 300;
+const ITEMS_PER_PAGE_DESKTOP = 200;
+const ITEMS_PER_PAGE_MOBILE = 50;
 
 function AlbumViewer() {
-  const [apiKey, setApiKey] = useState(localStorage.getItem('immich_api_key') || '');
-  const [albumId, setAlbumId] = useState(localStorage.getItem('immich_album_id') || '790fa206-9f0f-4b96-b38f-adcb55f8f419');
+  const isMobile = window.innerWidth <= 768;
+  const itemsPerPage = isMobile ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
+  // Safe localStorage access
+  const getSafeItem = (key, defaultValue) => {
+    try {
+      return localStorage.getItem(key) || defaultValue;
+    } catch (e) {
+      console.error('LocalStorage access failed:', e);
+      return defaultValue;
+    }
+  };
+
+  const [apiKey, setApiKey] = useState(() => getSafeItem('immich_api_key', ''));
+  const [albumId, setAlbumId] = useState(() => getSafeItem('immich_album_id', '790fa206-9f0f-4b96-b38f-adcb55f8f419'));
   const [allAssets, setAllAssets] = useState([]);
   const [displayedAssets, setDisplayedAssets] = useState([]);
   const [page, setPage] = useState(1);
@@ -25,27 +39,34 @@ function AlbumViewer() {
 
   // Save to localStorage
   useEffect(() => {
-    if (apiKey) localStorage.setItem('immich_api_key', apiKey);
-    if (albumId) localStorage.setItem('immich_album_id', albumId);
+    try {
+      if (apiKey) localStorage.setItem('immich_api_key', apiKey);
+      if (albumId) localStorage.setItem('immich_album_id', albumId);
+    } catch (e) {
+      console.error('Failed to save to localStorage:', e);
+    }
   }, [apiKey, albumId]);
 
   // Auto-load album if credentials are saved
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('immich_api_key');
-    const savedAlbumId = localStorage.getItem('immich_album_id');
+    const savedApiKey = getSafeItem('immich_api_key', '');
+    const savedAlbumId = getSafeItem('immich_album_id', '');
     
     if (savedApiKey && savedAlbumId && allAssets.length === 0 && !initialLoading) {
-      loadAlbum();
+      loadAlbum(savedApiKey, savedAlbumId);
     }
   }, []); // Only run on mount
 
-  const loadAlbum = async () => {
-    if (!albumId.trim()) {
+  const loadAlbum = async (providedKey, providedId) => {
+    const keyToUse = providedKey || apiKey;
+    const idToUse = providedId || albumId;
+
+    if (!idToUse?.trim()) {
       setError('Please enter an album ID');
       return;
     }
 
-    if (!apiKey.trim()) {
+    if (!keyToUse?.trim()) {
       setError('Please enter your Immich API key');
       return;
     }
@@ -57,16 +78,24 @@ function AlbumViewer() {
     setPage(1);
 
     try {
-      const response = await fetch(`${API_URL}/albums/${albumId}/assets`);
+      console.log(`Fetching album: ${idToUse}`);
+      const response = await fetch(`${API_URL}/albums/${idToUse}/assets`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch album: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server error: ${response.status}`);
       }
 
       const data = await response.json();
+      
+      if (!Array.isArray(data)) {
+        console.error('Expected array of assets, got:', data);
+        throw new Error('Server returned invalid data format');
+      }
+
       setAllAssets(data);
-      setDisplayedAssets(data.slice(0, ITEMS_PER_PAGE));
-      setHasMore(data.length > ITEMS_PER_PAGE);
+      setDisplayedAssets(data.slice(0, itemsPerPage));
+      setHasMore(data.length > itemsPerPage);
 
       if (data.length === 0) {
         setError('No assets found in this album');
@@ -79,6 +108,7 @@ function AlbumViewer() {
     }
   };
 
+
   // Load more items when scrolling
   const loadMore = useCallback(() => {
     if (loading || !hasMore) return;
@@ -86,16 +116,16 @@ function AlbumViewer() {
     setLoading(true);
     setTimeout(() => {
       const nextPage = page + 1;
-      const startIndex = nextPage * ITEMS_PER_PAGE;
-      const endIndex = startIndex + ITEMS_PER_PAGE;
+      const startIndex = nextPage * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
       const moreAssets = allAssets.slice(0, endIndex);
       
       setDisplayedAssets(moreAssets);
       setPage(nextPage);
       setHasMore(endIndex < allAssets.length);
       setLoading(false);
-    }, 300); // Small delay for smooth UX
-  }, [loading, hasMore, page, allAssets]);
+    }, 200); // Small delay for smooth UX
+  }, [loading, hasMore, page, allAssets, itemsPerPage]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -105,7 +135,7 @@ function AlbumViewer() {
           loadMore();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '600px' } // Pre-fetch well ahead for seamless scrolling
     );
 
     const currentTarget = observerTarget.current;
@@ -135,14 +165,13 @@ function AlbumViewer() {
 
     if (targetAssetIndex === -1) return;
 
-    // Load a window around the target date to avoid loading too many images
-    // Load ITEMS_PER_PAGE before and after the target
-    const startIndex = Math.max(0, targetAssetIndex - ITEMS_PER_PAGE);
-    const endIndex = Math.min(allAssets.length, targetAssetIndex + ITEMS_PER_PAGE * 2);
+    // Load a window around the target date
+    const startIndex = Math.max(0, targetAssetIndex - itemsPerPage);
+    const endIndex = Math.min(allAssets.length, targetAssetIndex + itemsPerPage * 2);
     
     const newAssets = allAssets.slice(startIndex, endIndex);
     setDisplayedAssets(newAssets);
-    setPage(Math.ceil(endIndex / ITEMS_PER_PAGE));
+    setPage(Math.ceil(endIndex / itemsPerPage));
     setHasMore(endIndex < allAssets.length);
 
     // Scroll to the date after a short delay
@@ -168,7 +197,7 @@ function AlbumViewer() {
     <div className="container">
       <header className="header">
         <div className="header-top">
-          <div>
+          <div className="title-section">
             <h1>Immich Viewer</h1>
             <p className="subtitle">Your memories, beautifully organized</p>
           </div>
@@ -177,7 +206,7 @@ function AlbumViewer() {
             <div className="search-box">
               <input
                 type="password"
-                placeholder="Enter Immich API Key"
+                placeholder="API Key"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 onKeyPress={handleKeyPress}
@@ -185,18 +214,18 @@ function AlbumViewer() {
               />
               <input
                 type="text"
-                placeholder="Enter Album ID"
+                placeholder="Album ID"
                 value={albumId}
                 onChange={(e) => setAlbumId(e.target.value)}
                 onKeyPress={handleKeyPress}
                 className="input album-id-input"
               />
               <button 
-                onClick={loadAlbum} 
+                onClick={() => loadAlbum()} 
                 disabled={initialLoading || !apiKey || !albumId} 
                 className="btn"
               >
-                {initialLoading ? 'Loading...' : 'Load Album'}
+                {initialLoading ? '...' : (isMobile ? 'Load' : 'Load Album')}
               </button>
             </div>
           </div>
@@ -240,7 +269,7 @@ function AlbumViewer() {
                 <p>Loading more images...</p>
               </div>
             )}
-            {!hasMore && (
+            {!hasMore && allAssets.length > 0 && (
               <div className="end-message">
                 🎉 You've reached the end! {allAssets.length} images total
               </div>
@@ -261,7 +290,6 @@ function AlbumViewer() {
             setFullscreenAsset(displayedAssets[newIndex]);
           }}
           onLoadMore={() => {
-            // Trigger load more if not already loading and there's more to load
             if (!loading && hasMore) {
               loadMore();
             }
@@ -281,3 +309,4 @@ function AlbumViewer() {
 }
 
 export default AlbumViewer;
+
