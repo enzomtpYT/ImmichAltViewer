@@ -65,14 +65,19 @@ async def shutdown_event():
     if db_pool:
         await db_pool.close()
 
-# Simple in-memory cache
-asset_cache = {}
+# Simple in-memory cache with TTL
+import time
+asset_cache = {}  # {album_id: (timestamp, data)}
+CACHE_TTL = 60  # seconds
 
 @app.get("/albums/{album_id}/assets")
 async def get_album_assets(album_id: str):
-    # Check cache first
+    # Check cache first (with TTL)
+    now = time.time()
     if album_id in asset_cache:
-        return asset_cache[album_id]
+        cached_time, cached_data = asset_cache[album_id]
+        if now - cached_time < CACHE_TTL:
+            return cached_data
         
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
@@ -87,7 +92,7 @@ async def get_album_assets(album_id: str):
         )
     
     result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"]} for row in rows]
-    asset_cache[album_id] = result
+    asset_cache[album_id] = (now, result)
     return result
 
 
