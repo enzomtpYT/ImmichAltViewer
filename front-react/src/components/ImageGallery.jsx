@@ -1,9 +1,26 @@
-import { useMemo, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import ImageCard from './ImageCard';
 
-function ImageGallery({ assets, apiKey, onFullscreen }) {
+function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
   const parentRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(1200);
+
+  useEffect(() => {
+    const element = parentRef.current;
+    if (!element) return;
+
+    const updateWidth = () => {
+      setContainerWidth(element.clientWidth || 1200);
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(element);
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Flat list of items (headers + image rows)
   const virtualData = useMemo(() => {
@@ -22,13 +39,11 @@ function ImageGallery({ assets, apiKey, onFullscreen }) {
 
       if (dateString !== currentDate) {
         if (currentAssets.length > 0) {
-          // Push row chunks for previous date
-          const rows = [];
           for (let i = 0; i < currentAssets.length; i += 4) {
             items.push({ type: 'row', assets: currentAssets.slice(i, i + 4) });
           }
         }
-        items.push({ type: 'header', date: dateString, count: 0 }); // Count updated later
+        items.push({ type: 'header', date: dateString });
         currentDate = dateString;
         currentAssets = [asset];
       } else {
@@ -42,16 +57,50 @@ function ImageGallery({ assets, apiKey, onFullscreen }) {
       }
     }
 
-    // Update counts in headers (optional but nice)
     return items;
   }, [assets]);
+
+  const headerIndexMap = useMemo(() => {
+    const map = new Map();
+    virtualData.forEach((item, index) => {
+      if (item.type === 'header') {
+        map.set(item.date, index);
+      }
+    });
+    return map;
+  }, [virtualData]);
+
+  const columns = useMemo(() => {
+    if (containerWidth >= 1024) return 4;
+    if (containerWidth >= 768) return 3;
+    return 2;
+  }, [containerWidth]);
+
+  const estimatedRowHeight = useMemo(() => {
+    const horizontalPadding = containerWidth >= 1024 ? 64 : 32;
+    const rowGap = 16;
+    const availableWidth = Math.max(320, containerWidth - horizontalPadding);
+    const cardWidth = Math.floor((availableWidth - rowGap * (columns - 1)) / columns);
+    return cardWidth + 16;
+  }, [containerWidth, columns]);
 
   const rowVirtualizer = useVirtualizer({
     count: virtualData.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: (index) => virtualData[index].type === 'header' ? 76 : 400,
-    overscan: 5,
+    estimateSize: (index) => virtualData[index].type === 'header' ? 76 : estimatedRowHeight,
+    measureElement: (element) => element.getBoundingClientRect().height,
+    overscan: 10,
+    gap: 0,
   });
+
+  useEffect(() => {
+    if (!jumpToDateRequest?.dateString) return;
+
+    const headerIndex = headerIndexMap.get(jumpToDateRequest.dateString);
+    if (headerIndex === undefined) return;
+
+    rowVirtualizer.scrollToIndex(headerIndex, { align: 'start' });
+  }, [jumpToDateRequest, headerIndexMap, rowVirtualizer]);
 
   return (
     <div 
@@ -66,16 +115,17 @@ function ImageGallery({ assets, apiKey, onFullscreen }) {
           const item = virtualData[virtualRow.index];
           return (
             <div
-              key={virtualRow.index}
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={rowVirtualizer.measureElement}
               className="absolute top-0 left-0 w-full"
               style={{
-                minHeight: `${virtualRow.size}px`,
                 transform: `translateY(${virtualRow.start}px)`,
                 paddingBottom: item.type === 'row' ? '16px' : '0'
               }}
             >
               {item.type === 'header' ? (
-                <div className="flex items-center justify-between py-4 border-b border-white/5 mb-4 bg-[#0c0c0c]/80 backdrop-blur-sm sticky top-0 z-10">
+                <div className="flex items-center justify-between py-4 border-b border-white/5 mb-4 bg-[#0c0c0c] sticky top-0 z-10">
                   <h2 className="text-xl font-bold text-white/80">{item.date}</h2>
                 </div>
               ) : (
