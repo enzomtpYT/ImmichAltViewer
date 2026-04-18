@@ -1,10 +1,8 @@
-import { useState } from 'react';
-import './App.css';
 import AlbumViewer from './components/AlbumViewer';
 
 function App() {
   return (
-    <div className="app">
+    <div className="min-h-screen w-screen bg-black text-white selection:bg-immich-primary/30">
       <AlbumViewer />
     </div>
   );

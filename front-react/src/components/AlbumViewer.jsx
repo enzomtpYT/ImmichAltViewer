@@ -1,17 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import ImageGallery from './ImageGallery';
 import FullscreenViewer from './FullscreenViewer';
 import DateSlider from './DateSlider';
-import './AlbumViewer.css';
+import { Settings, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
-const IMMICH_URL = 'http://192.168.1.110:2283';
-const ITEMS_PER_PAGE_DESKTOP = 200;
-const ITEMS_PER_PAGE_MOBILE = 50;
 
 function AlbumViewer() {
   const isMobile = window.innerWidth <= 768;
-  const itemsPerPage = isMobile ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
   // Safe localStorage access
   const getSafeItem = (key, defaultValue) => {
@@ -26,16 +22,11 @@ function AlbumViewer() {
   const [apiKey, setApiKey] = useState(() => getSafeItem('immich_api_key', ''));
   const [albumId, setAlbumId] = useState(() => getSafeItem('immich_album_id', '790fa206-9f0f-4b96-b38f-adcb55f8f419'));
   const [allAssets, setAllAssets] = useState([]);
-  const [displayedAssets, setDisplayedAssets] = useState([]);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hasMore, setHasMore] = useState(true);
   const [fullscreenAsset, setFullscreenAsset] = useState(null);
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
-  
-  const observerTarget = useRef(null);
+  const [showConfig, setShowConfig] = useState(false);
 
   // Save to localStorage
   useEffect(() => {
@@ -74,11 +65,8 @@ function AlbumViewer() {
     setError('');
     setInitialLoading(true);
     setAllAssets([]);
-    setDisplayedAssets([]);
-    setPage(1);
 
     try {
-      console.log(`Fetching album: ${idToUse}`);
       const response = await fetch(`${API_URL}/albums/${idToUse}/assets`);
       
       if (!response.ok) {
@@ -89,17 +77,14 @@ function AlbumViewer() {
       const data = await response.json();
       
       if (!Array.isArray(data)) {
-        console.error('Expected array of assets, got:', data);
         throw new Error('Server returned invalid data format');
       }
 
       setAllAssets(data);
-      setDisplayedAssets(data.slice(0, itemsPerPage));
-      setHasMore(data.length > itemsPerPage);
-
       if (data.length === 0) {
         setError('No assets found in this album');
       }
+      setShowConfig(false);
     } catch (err) {
       setError(`Error: ${err.message}`);
       console.error('Failed to load album:', err);
@@ -108,50 +93,7 @@ function AlbumViewer() {
     }
   };
 
-
-  // Load more items when scrolling
-  const loadMore = useCallback(() => {
-    if (loading || !hasMore) return;
-
-    setLoading(true);
-    setTimeout(() => {
-      const nextPage = page + 1;
-      const startIndex = nextPage * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const moreAssets = allAssets.slice(0, endIndex);
-      
-      setDisplayedAssets(moreAssets);
-      setPage(nextPage);
-      setHasMore(endIndex < allAssets.length);
-      setLoading(false);
-    }, 200); // Small delay for smooth UX
-  }, [loading, hasMore, page, allAssets, itemsPerPage]);
-
-  // Intersection Observer for infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
-          loadMore();
-        }
-      },
-      { threshold: 0.1, rootMargin: '600px' } // Pre-fetch well ahead for seamless scrolling
-    );
-
-    const currentTarget = observerTarget.current;
-    if (currentTarget) {
-      observer.observe(currentTarget);
-    }
-
-    return () => {
-      if (currentTarget) {
-        observer.unobserve(currentTarget);
-      }
-    };
-  }, [hasMore, loading, loadMore]);
-
   const handleDateSelect = (dateString) => {
-    // Find the first asset with this date
     const targetAssetIndex = allAssets.findIndex((asset) => {
       const assetDate = new Date(asset.createdAt);
       const assetDateString = assetDate.toLocaleDateString('en-US', {
@@ -165,26 +107,8 @@ function AlbumViewer() {
 
     if (targetAssetIndex === -1) return;
 
-    // Load a window around the target date
-    const startIndex = Math.max(0, targetAssetIndex - itemsPerPage);
-    const endIndex = Math.min(allAssets.length, targetAssetIndex + itemsPerPage * 2);
-    
-    const newAssets = allAssets.slice(startIndex, endIndex);
-    setDisplayedAssets(newAssets);
-    setPage(Math.ceil(endIndex / itemsPerPage));
-    setHasMore(endIndex < allAssets.length);
-
-    // Scroll to the date after a short delay
-    setTimeout(() => {
-      const daySeparators = document.querySelectorAll('.day-separator');
-      for (let separator of daySeparators) {
-        const title = separator.querySelector('.day-title');
-        if (title && title.textContent === dateString) {
-          separator.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          break;
-        }
-      }
-    }, 200);
+    // We'll let ImageGallery handle the scrolling since it manages the virtual list
+    return targetAssetIndex;
   };
 
   const handleKeyPress = (e) => {
@@ -194,115 +118,133 @@ function AlbumViewer() {
   };
 
   return (
-    <div className="container">
-      <header className="header">
-        <div className="header-top">
-          <div className="title-section">
-            <h1>Immich Viewer</h1>
-            <p className="subtitle">Your memories, beautifully organized</p>
+    <div className="flex flex-col h-screen overflow-hidden">
+      <header className="flex-none z-30 bg-black/40 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-immich-primary p-2 rounded-lg">
+            <ImageIcon className="w-5 h-5 text-white" />
           </div>
-          
-          <div className="search-container">
-            <div className="search-box">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white/90">Immich Viewer</h1>
+            {allAssets.length > 0 && (
+              <p className="text-xs text-white/40 font-medium">
+                {allAssets.length.toLocaleString()} Memories
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setShowConfig(!showConfig)}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+          >
+            <Settings className={`w-5 h-5 ${showConfig ? 'text-immich-primary' : 'text-white/60'}`} />
+          </button>
+        </div>
+      </header>
+
+      {showConfig && (
+        <div className="flex-none p-6 bg-immich-glass backdrop-blur-xl border-b border-white/10 animate-fade-in">
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">API Key</label>
               <input
                 type="password"
-                placeholder="API Key"
+                placeholder="Paste key here"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 onKeyPress={handleKeyPress}
-                className="input api-key-input"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Album UUID</label>
               <input
                 type="text"
-                placeholder="Album ID"
+                placeholder="Enter ID"
                 value={albumId}
                 onChange={(e) => setAlbumId(e.target.value)}
                 onKeyPress={handleKeyPress}
-                className="input album-id-input"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
               />
-              <button 
-                onClick={() => loadAlbum()} 
-                disabled={initialLoading || !apiKey || !albumId} 
-                className="btn"
-              >
-                {initialLoading ? '...' : (isMobile ? 'Load' : 'Load Album')}
-              </button>
             </div>
+            <button 
+              onClick={() => loadAlbum()} 
+              disabled={initialLoading || !apiKey || !albumId} 
+              className="bg-immich-primary hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-immich-primary text-white text-sm font-semibold rounded-lg px-6 py-2 transition-all shadow-lg shadow-immich-primary/20"
+            >
+              {initialLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Load Memories'}
+            </button>
           </div>
+          {error && <div className="mt-4 text-xs text-red-400 bg-red-400/10 p-2 rounded border border-red-400/20">{error}</div>}
         </div>
+      )}
 
-        {allAssets.length > 0 && (
-          <div className="stats-bar">
-            <div className="stats">
-              Showing {displayedAssets.length} / {allAssets.length} memories
-            </div>
+      <main className="flex-1 relative overflow-hidden bg-[#0c0c0c]">
+        {initialLoading && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+            <Loader2 className="w-10 h-10 text-immich-primary animate-spin mb-4" />
+            <p className="text-white/60 font-medium animate-pulse">Reliving your moments...</p>
           </div>
         )}
-      </header>
 
-      {initialLoading && (
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Fetching your album...</p>
-        </div>
-      )}
-      
-      {error && <div className="error">{error}</div>}
-
-      {displayedAssets.length > 0 && (
-        <>
-          <ImageGallery 
-            assets={displayedAssets} 
-            apiKey={apiKey}
-            onFullscreen={(asset) => {
-              const index = displayedAssets.findIndex(a => a.assetId === asset.assetId);
-              setFullscreenIndex(index);
-              setFullscreenAsset(asset);
-            }}
-          />
-
-          {/* Infinite scroll trigger */}
-          <div ref={observerTarget} className="observer-target">
-            {loading && (
-              <div className="loading-more">
-                <div className="spinner small"></div>
-                <p>Loading more images...</p>
-              </div>
-            )}
-            {!hasMore && allAssets.length > 0 && (
-              <div className="end-message">
-                🎉 You've reached the end! {allAssets.length} images total
+        {allAssets.length > 0 ? (
+          <div className="h-full flex">
+            <div className="flex-1 min-w-0">
+              <ImageGallery 
+                assets={allAssets} 
+                apiKey={apiKey}
+                onFullscreen={(asset, index) => {
+                  setFullscreenIndex(index);
+                  setFullscreenAsset(asset);
+                }}
+              />
+            </div>
+            {!isMobile && (
+              <div className="w-64 border-l border-white/5 bg-black/20">
+                <DateSlider
+                  assets={allAssets}
+                  onDateSelect={handleDateSelect}
+                />
               </div>
             )}
           </div>
-        </>
-      )}
+        ) : !initialLoading && (
+          <div className="flex flex-col items-center justify-center h-full text-white/20 p-8 text-center">
+            <ImageIcon className="w-16 h-16 mb-4 opacity-10" />
+            <p className="text-lg font-medium">No assets loaded</p>
+            <p className="text-sm">Enter your credentials to see your memories</p>
+            <button 
+              onClick={() => setShowConfig(true)}
+              className="mt-4 text-immich-primary hover:underline text-sm font-medium"
+            >
+              Open Settings
+            </button>
+          </div>
+        )}
+      </main>
 
-      {/* Fullscreen viewer */}
       {fullscreenAsset && (
         <FullscreenViewer
-          assets={displayedAssets}
+          assets={allAssets}
           currentIndex={fullscreenIndex}
           apiKey={apiKey}
           onClose={() => setFullscreenAsset(null)}
           onNavigate={(newIndex) => {
             setFullscreenIndex(newIndex);
-            setFullscreenAsset(displayedAssets[newIndex]);
-          }}
-          onLoadMore={() => {
-            if (!loading && hasMore) {
-              loadMore();
-            }
+            setFullscreenAsset(allAssets[newIndex]);
           }}
         />
       )}
-
-      {/* Date slider for navigation */}
-      {allAssets.length > 0 && (
-        <DateSlider
-          assets={allAssets}
-          onDateSelect={handleDateSelect}
-        />
+      
+      {isMobile && allAssets.length > 0 && (
+         <div className="fixed bottom-4 right-4 z-40">
+            <DateSlider
+              assets={allAssets}
+              onDateSelect={handleDateSelect}
+            />
+         </div>
       )}
     </div>
   );
