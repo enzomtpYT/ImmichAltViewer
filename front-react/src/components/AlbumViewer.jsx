@@ -27,6 +27,7 @@ function AlbumViewer() {
   const [fullscreenAsset, setFullscreenAsset] = useState(null);
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
   const [showConfig, setShowConfig] = useState(false);
+  const [jumpToDateRequest, setJumpToDateRequest] = useState(null);
 
   // Save to localStorage
   useEffect(() => {
@@ -107,8 +108,8 @@ function AlbumViewer() {
 
     if (targetAssetIndex === -1) return;
 
-    // We'll let ImageGallery handle the scrolling since it manages the virtual list
-    return targetAssetIndex;
+    // Trigger a distinct request each time so repeated clicks on the same date still jump.
+    setJumpToDateRequest({ dateString, requestId: Date.now() });
   };
 
   const handleKeyPress = (e) => {
@@ -195,6 +196,7 @@ function AlbumViewer() {
               <ImageGallery 
                 assets={allAssets} 
                 apiKey={apiKey}
+                jumpToDateRequest={jumpToDateRequest}
                 onFullscreen={(asset, index) => {
                   setFullscreenIndex(index);
                   setFullscreenAsset(asset);
