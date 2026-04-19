@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Calendar, ChevronRight } from 'lucide-react';
 
 function DateSlider({ assets, onDateSelect }) {
