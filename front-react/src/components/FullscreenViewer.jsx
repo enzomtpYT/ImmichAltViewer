@@ -15,14 +15,16 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     setIndex(currentIndex);
   }, [currentIndex]);
 
-  // Preload next 3 images (skip videos)
+  // Preload nearby images in both directions (skip videos)
   useEffect(() => {
     const preloadImages = [];
-    for (let i = 1; i <= 3; i++) {
-      const nextIndex = index + i;
-      if (nextIndex < assets.length && assets[nextIndex].type !== 'VIDEO') {
+    for (let i = -3; i <= 3; i++) {
+      if (i === 0) continue;
+
+      const candidateIndex = index + i;
+      if (candidateIndex >= 0 && candidateIndex < assets.length && assets[candidateIndex].type !== 'VIDEO') {
         const img = new Image();
-        img.src = `${API_URL}/proxy/fullsize/${assets[nextIndex].assetId}?api_key=${encodeURIComponent(apiKey)}`;
+        img.src = `${API_URL}/proxy/fullsize/${assets[candidateIndex].assetId}?api_key=${encodeURIComponent(apiKey)}`;
         preloadImages.push(img);
       }
     }
