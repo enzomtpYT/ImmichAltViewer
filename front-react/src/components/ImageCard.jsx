@@ -29,6 +29,20 @@ const ImageCard = memo(({ asset, apiKey, onFullscreen }) => {
           e.target.style.display = 'none';
         }}
       />
+
+      {asset.sourceColor && (
+        <>
+          <div
+            className="absolute left-2 top-2 h-2.5 w-2.5 rounded-full border border-white/70 shadow"
+            style={{ backgroundColor: asset.sourceColor }}
+            title={asset.sourceAlbumName || 'Album source'}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 h-1.5"
+            style={{ backgroundColor: asset.sourceColor }}
+          />
+        </>
+      )}
       
       {/* Hover Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">

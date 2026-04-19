@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, Response
@@ -9,6 +9,7 @@ import httpx
 import os
 from dotenv import load_dotenv
 import mimetypes
+from uuid import UUID
 
 # Fix MIME types for Windows
 mimetypes.add_type('application/javascript', '.js')
@@ -93,6 +94,54 @@ async def get_album_assets(album_id: str):
     
     result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"]} for row in rows]
     asset_cache[album_id] = (now, result)
+    return result
+
+
+@app.get("/albums/assets")
+async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-separated album UUIDs")):
+    album_ids_raw = [album_id.strip() for album_id in ids.split(",") if album_id.strip()]
+    if not album_ids_raw:
+        raise HTTPException(status_code=400, detail="No album IDs provided")
+
+    valid_album_ids = []
+    for album_id in album_ids_raw:
+        try:
+            UUID(album_id)
+            valid_album_ids.append(album_id)
+        except ValueError:
+            continue
+
+    if not valid_album_ids:
+        raise HTTPException(status_code=400, detail="No valid album IDs provided")
+
+    normalized_ids = sorted(set(valid_album_ids))
+    cache_key = f"multi:{','.join(normalized_ids)}"
+
+    now = time.time()
+    if cache_key in asset_cache:
+        cached_time, cached_data = asset_cache[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return cached_data
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            '''
+            SELECT DISTINCT ON (aa."assetId")
+                aa."assetId",
+                aa."createdAt",
+                a."type"
+            FROM album_asset aa
+            JOIN asset a ON a."id" = aa."assetId"
+            WHERE aa."albumId" = ANY($1::uuid[])
+            ORDER BY aa."assetId", aa."createdAt" DESC
+            ''',
+            normalized_ids
+        )
+
+    result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"]} for row in rows]
+    result.sort(key=lambda item: (item["createdAt"], item["assetId"]), reverse=True)
+
+    asset_cache[cache_key] = (now, result)
     return result
 
 

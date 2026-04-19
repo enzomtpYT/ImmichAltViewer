@@ -84,6 +84,7 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     return cardWidth + 16;
   }, [containerWidth, columns]);
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: virtualData.length,
     getScrollElement: () => parentRef.current,

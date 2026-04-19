@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { AnimatePresence, motion as Motion } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Maximize2 } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
@@ -29,13 +29,42 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     return () => preloadImages.forEach(img => (img.src = ''));
   }, [index, assets, apiKey]);
 
+  const fullsizeUrl = isVideo
+    ? `${API_URL}/proxy/video/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`
+    : `${API_URL}/proxy/fullsize/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`;
+
+  const goToPrevious = useCallback(() => {
+    if (index > 0) {
+      const newIndex = index - 1;
+      setIndex(newIndex);
+      onNavigate(newIndex);
+    }
+  }, [index, onNavigate]);
+
+  const goToNext = useCallback(() => {
+    if (index < assets.length - 1) {
+      const newIndex = index + 1;
+      setIndex(newIndex);
+      onNavigate(newIndex);
+    }
+  }, [index, assets.length, onNavigate]);
+
+  const handleDownload = useCallback(() => {
+    const link = document.createElement('a');
+    link.href = fullsizeUrl;
+    link.download = `immich_${asset.assetId}.${isVideo ? 'mp4' : 'jpg'}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [asset.assetId, fullsizeUrl, isVideo]);
+
   useEffect(() => {
     const handleKeyboard = (e) => {
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowLeft') goToPrevious();
       else if (e.key === 'ArrowRight') goToNext();
       else if (e.key === 'ArrowDown') handleDownload();
-      else if (e.key === 'i') setShowInfo(!showInfo);
+      else if (e.key === 'i') setShowInfo(prev => !prev);
     };
 
     document.addEventListener('keydown', handleKeyboard);
@@ -44,41 +73,12 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       document.removeEventListener('keydown', handleKeyboard);
       document.body.style.overflow = 'auto';
     };
-  }, [index, showInfo]);
+  }, [onClose, goToPrevious, goToNext, handleDownload]);
 
-  const goToPrevious = () => {
-    if (index > 0) {
-      const newIndex = index - 1;
-      setIndex(newIndex);
-      onNavigate(newIndex);
-    }
-  };
-
-  const goToNext = () => {
-    if (index < assets.length - 1) {
-      const newIndex = index + 1;
-      setIndex(newIndex);
-      onNavigate(newIndex);
-    }
-  };
-
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = fullsizeUrl;
-    link.download = `immich_${asset.assetId}.${isVideo ? 'mp4' : 'jpg'}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const fullsizeUrl = isVideo
-    ? `${API_URL}/proxy/video/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`
-    : `${API_URL}/proxy/fullsize/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`;
-  
   const date = new Date(asset.createdAt);
 
   return (
-    <motion.div 
+    <Motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -138,7 +138,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
         )}
 
         <AnimatePresence mode="wait">
-          <motion.div
+          <Motion.div
             key={asset.assetId}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -163,13 +163,13 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
                 draggable="false"
               />
             )}
-          </motion.div>
+          </Motion.div>
         </AnimatePresence>
 
         {/* Info panel overlay */}
         <AnimatePresence>
           {showInfo && (
-            <motion.div 
+            <Motion.div 
               initial={{ x: 300, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 300, opacity: 0 }}
@@ -219,7 +219,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </Motion.div>
           )}
         </AnimatePresence>
       </div>
@@ -228,7 +228,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       <div className="flex-none p-6 text-center text-white/20 text-[10px] font-bold tracking-[0.2em] uppercase">
         Swipe down to download • Swipe up to close
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }
 
