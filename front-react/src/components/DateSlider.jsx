@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Calendar, ChevronRight } from 'lucide-react';
 
-function DateSlider({ assets, onDateSelect }) {
+function DateSlider({ assets, onDateSelect, compact = false, onClose }) {
   const [selectedDate, setSelectedDate] = useState(null);
 
   const dates = useMemo(() => {
@@ -36,13 +36,14 @@ function DateSlider({ assets, onDateSelect }) {
   const handleDateClick = (date) => {
     setSelectedDate(date.dateString);
     onDateSelect(date.dateString);
+    onClose?.();
   };
 
   if (dates.length === 0) return null;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-white/5 flex items-center justify-between">
+    <div className={`flex flex-col ${compact ? 'h-[min(70vh,520px)]' : 'h-full'}`}>
+      <div className={`border-b border-white/5 flex items-center justify-between ${compact ? 'p-3' : 'p-4'}`}>
         <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
           <Calendar className="w-4 h-4" /> Timeline
         </h3>
@@ -51,7 +52,7 @@ function DateSlider({ assets, onDateSelect }) {
         </span>
       </div>
       
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+      <div className={`flex-1 overflow-y-auto custom-scrollbar ${compact ? 'p-1.5' : 'p-2'}`}>
         {dates.map((date, index) => {
           const dateObj = new Date(date.timestamp);
           const isSelected = selectedDate === date.dateString;

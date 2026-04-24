@@ -10,7 +10,7 @@ const ImageCard = memo(({ asset, apiKey, onFullscreen }) => {
 
   return (
     <div 
-      className="group relative w-full aspect-square overflow-hidden rounded-xl bg-white/5 cursor-pointer ring-1 ring-white/10 hover:ring-immich-primary/50 transition-all duration-300"
+      className="group relative w-full aspect-square overflow-hidden rounded-xl bg-white/5 cursor-pointer ring-1 ring-white/10 md:hover:ring-immich-primary/50 transition-all duration-300"
       onClick={() => onFullscreen(asset)}
     >
       {/* Loading Skeleton */}
@@ -23,8 +23,10 @@ const ImageCard = memo(({ asset, apiKey, onFullscreen }) => {
       <img
         src={imageUrl}
         alt=""
+        loading="lazy"
+        decoding="async"
         onLoad={() => setLoaded(true)}
-        className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        className={`w-full h-full object-cover transition-all duration-500 md:group-hover:scale-110 ${loaded ? 'opacity-100' : 'opacity-0'}`}
         onError={(e) => {
           e.target.style.display = 'none';
         }}
@@ -45,7 +47,7 @@ const ImageCard = memo(({ asset, apiKey, onFullscreen }) => {
       )}
       
       {/* Hover Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
         {isVideo && (
           <div className="bg-white/20 backdrop-blur-md p-1.5 rounded-lg border border-white/20">
             <Play className="w-3 h-3 text-white fill-white" />

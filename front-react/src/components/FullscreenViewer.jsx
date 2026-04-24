@@ -8,6 +8,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   const [index, setIndex] = useState(currentIndex);
   const [showInfo, setShowInfo] = useState(false);
   const videoRef = useRef(null);
+  const touchStartRef = useRef(null);
   const asset = assets[index];
   const isVideo = asset?.type === 'VIDEO';
 
@@ -77,6 +78,59 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     };
   }, [onClose, goToPrevious, goToNext, handleDownload]);
 
+  const handleTouchStart = useCallback((e) => {
+    if (e.touches.length !== 1) return;
+
+    // Allow native interactions for controls and buttons.
+    const target = e.target;
+    if (target?.closest?.('button, video')) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now(),
+    };
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    if (!start || e.changedTouches.length !== 1) return;
+
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const dt = Math.max(1, Date.now() - start.time);
+    const sx = dx / dt;
+    const sy = dy / dt;
+
+    // Ignore taps and tiny drags.
+    if (absX < 40 && absY < 40) return;
+
+    // Dominant axis dispatch keeps gestures predictable.
+    if (absX > absY) {
+      if (dx > 90 || sx > 0.65) {
+        goToPrevious();
+      } else if (dx < -90 || sx < -0.65) {
+        goToNext();
+      }
+      return;
+    }
+
+    if (dy > 140 || sy > 0.85) {
+      handleDownload();
+    } else if (dy < -140 || sy < -0.85) {
+      onClose();
+    }
+  }, [goToPrevious, goToNext, handleDownload, onClose]);
+
   const date = new Date(asset.createdAt);
 
   return (
@@ -84,15 +138,6 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      drag="y"
-      dragConstraints={{ top: 0, bottom: 0 }}
-      onDragEnd={(e, { offset, velocity }) => {
-        if (offset.y > 200 || velocity.y > 500) {
-          handleDownload();
-        } else if (offset.y < -200 || velocity.y < -500) {
-          onClose();
-        }
-      }}
       className="fixed inset-0 z-50 bg-black/95 backdrop-blur-3xl flex flex-col pt-[max(env(safe-area-inset-top),1rem)]"
     >
       {/* Top Bar */}
@@ -120,7 +165,11 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden touch-none px-4">
+      <div
+        className="flex-1 relative flex items-center justify-center overflow-hidden touch-none px-4"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {index > 0 && (
           <button 
             onClick={goToPrevious}
@@ -228,7 +277,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
 
       {/* Swipe/Nav hints (Mobile) */}
       <div className="flex-none p-6 text-center text-white/20 text-[10px] font-bold tracking-[0.2em] uppercase">
-        Swipe down to download • Swipe up to close
+        Swipe left/right to navigate • Swipe down to download • Swipe up to close
       </div>
     </Motion.div>
   );
