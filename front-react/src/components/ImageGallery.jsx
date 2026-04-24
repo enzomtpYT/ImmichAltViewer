@@ -22,6 +22,11 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     return () => resizeObserver.disconnect();
   }, []);
 
+  const columns = useMemo(() => {
+    if (containerWidth >= 768) return 4;
+    return 3;
+  }, [containerWidth]);
+
   // Flat list of items (headers + image rows)
   const virtualData = useMemo(() => {
     const items = [];
@@ -39,8 +44,8 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
 
       if (dateString !== currentDate) {
         if (currentAssets.length > 0) {
-          for (let i = 0; i < currentAssets.length; i += 4) {
-            items.push({ type: 'row', assets: currentAssets.slice(i, i + 4) });
+          for (let i = 0; i < currentAssets.length; i += columns) {
+            items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
           }
         }
         items.push({ type: 'header', date: dateString });
@@ -52,13 +57,13 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     });
 
     if (currentAssets.length > 0) {
-      for (let i = 0; i < currentAssets.length; i += 4) {
-        items.push({ type: 'row', assets: currentAssets.slice(i, i + 4) });
+      for (let i = 0; i < currentAssets.length; i += columns) {
+        items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
       }
     }
 
     return items;
-  }, [assets]);
+  }, [assets, columns]);
 
   const headerIndexMap = useMemo(() => {
     const map = new Map();
@@ -69,12 +74,6 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     });
     return map;
   }, [virtualData]);
-
-  const columns = useMemo(() => {
-    if (containerWidth >= 1024) return 4;
-    if (containerWidth >= 768) return 3;
-    return 2;
-  }, [containerWidth]);
 
   const estimatedRowHeight = useMemo(() => {
     const horizontalPadding = containerWidth >= 1024 ? 64 : 32;
@@ -130,7 +129,7 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
                   <h2 className="text-xl font-bold text-white/80">{item.date}</h2>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {item.assets.map((asset) => (
                     <ImageCard
                       key={asset.assetId}
@@ -142,8 +141,8 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
                       }}
                     />
                   ))}
-                  {/* Fill empty slots in grid if row is shorter than 4 */}
-                  {item.assets.length < 4 && Array.from({ length: 4 - item.assets.length }).map((_, i) => (
+                  {/* Fill empty slots in grid if row is shorter than responsive column count */}
+                  {item.assets.length < columns && Array.from({ length: columns - item.assets.length }).map((_, i) => (
                     <div key={`empty-${i}`} />
                   ))}
                 </div>

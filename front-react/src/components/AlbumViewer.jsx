@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import ImageGallery from './ImageGallery';
 import FullscreenViewer from './FullscreenViewer';
 import DateSlider from './DateSlider';
-import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2 } from 'lucide-react';
+import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
 const ALBUM_COLOR_PALETTE = [
@@ -68,6 +68,7 @@ function AlbumViewer() {
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
   const [showConfig, setShowConfig] = useState(false);
   const [jumpToDateRequest, setJumpToDateRequest] = useState(null);
+  const [showMobileTimeline, setShowMobileTimeline] = useState(false);
 
   const getAlbumDisplayName = useCallback((id) => {
     const saved = savedAlbums.find((album) => album.id === id);
@@ -527,6 +528,7 @@ function AlbumViewer() {
                 <DateSlider
                   assets={allAssets}
                   onDateSelect={handleDateSelect}
+                  compact={false}
                 />
               </div>
             )}
@@ -559,13 +561,45 @@ function AlbumViewer() {
         />
       )}
       
-      {isMobile && allAssets.length > 0 && (
-         <div className="fixed bottom-4 right-4 z-40">
-            <DateSlider
-              assets={allAssets}
-              onDateSelect={handleDateSelect}
-            />
-         </div>
+      {isMobile && allAssets.length > 0 && !fullscreenAsset && (
+        <>
+          <button
+            onClick={() => setShowMobileTimeline(true)}
+            className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/70 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md"
+            aria-label="Open timeline"
+          >
+            <Calendar className="h-4 w-4" />
+            Timeline
+          </button>
+
+          {showMobileTimeline && (
+            <div className="fixed inset-0 z-50 flex items-end bg-black/60">
+              <button
+                className="absolute inset-0"
+                onClick={() => setShowMobileTimeline(false)}
+                aria-label="Close timeline"
+              />
+              <div className="relative w-full rounded-t-2xl border-t border-white/10 bg-[#0c0c0c] shadow-2xl">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-white/50">Timeline</p>
+                  <button
+                    onClick={() => setShowMobileTimeline(false)}
+                    className="rounded-md p-1.5 text-white/70 hover:bg-white/10"
+                    aria-label="Close timeline panel"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <DateSlider
+                  assets={allAssets}
+                  onDateSelect={handleDateSelect}
+                  compact
+                  onClose={() => setShowMobileTimeline(false)}
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
