@@ -81,9 +81,9 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length !== 1) return;
 
-    // Allow native interactions for controls and buttons.
+    // Allow native interactions for buttons.
     const target = e.target;
-    if (target?.closest?.('button, video')) {
+    if (target?.closest?.('button')) {
       touchStartRef.current = null;
       return;
     }
