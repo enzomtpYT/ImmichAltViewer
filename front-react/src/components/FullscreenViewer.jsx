@@ -53,13 +53,17 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   }, [index, assets.length, onNavigate]);
 
   const handleDownload = useCallback(() => {
+    const defaultExt = isVideo ? 'mp4' : 'jpg';
+    const fallbackName = `immich_${asset.assetId}.${defaultExt}`;
+    const filename = asset?.originalFileName || fallbackName;
+
     const link = document.createElement('a');
     link.href = fullsizeUrl;
-    link.download = `immich_${asset.assetId}.${isVideo ? 'mp4' : 'jpg'}`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [asset.assetId, fullsizeUrl, isVideo]);
+  }, [asset, fullsizeUrl, isVideo]);
 
   useEffect(() => {
     const handleKeyboard = (e) => {
@@ -141,7 +145,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       className="fixed inset-0 z-50 bg-black/95 backdrop-blur-3xl flex flex-col pt-[max(env(safe-area-inset-top),1rem)]"
     >
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-[60] flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-auto">
         <div className="flex items-center gap-3">
           <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
             <span className="text-xs font-bold text-white/80">{index + 1} / {assets.length}</span>
@@ -188,34 +192,28 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
           </button>
         )}
 
-        <AnimatePresence mode="wait">
-          <Motion.div
-            key={asset.assetId}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            transition={{ duration: 0.2 }}
-            className="w-full h-full flex items-center justify-center"
-          >
-            {isVideo ? (
-              <video
-                ref={videoRef}
-                src={fullsizeUrl}
-                className="max-w-full max-h-full rounded-lg shadow-2xl"
-                controls
-                autoPlay
-                playsInline
-              />
-            ) : (
-              <img 
-                src={fullsizeUrl} 
-                alt={asset.assetId}
-                className="max-w-full max-h-full object-contain rounded-sm shadow-2xl"
-                draggable="false"
-              />
-            )}
-          </Motion.div>
-        </AnimatePresence>
+        <div
+          key={asset.assetId}
+          className="w-full h-full flex items-center justify-center"
+        >
+          {isVideo ? (
+            <video
+              ref={videoRef}
+              src={fullsizeUrl}
+              className="max-w-full max-h-full rounded-lg shadow-2xl"
+              controls
+              autoPlay
+              playsInline
+            />
+          ) : (
+            <img 
+              src={fullsizeUrl} 
+              alt={asset.assetId}
+              className="max-w-full max-h-full object-contain rounded-sm shadow-2xl"
+              draggable="false"
+            />
+          )}
+        </div>
 
         {/* Info panel overlay */}
         <AnimatePresence>
@@ -224,11 +222,20 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               initial={{ x: 300, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 300, opacity: 0 }}
-              className="absolute right-0 top-0 bottom-0 w-80 bg-black/80 backdrop-blur-2xl border-l border-white/10 p-6 z-50 overflow-y-auto pt-24"
+              className="absolute right-0 top-0 bottom-0 w-80 bg-black/85 backdrop-blur-2xl border-l border-white/10 p-6 z-50 overflow-y-auto pt-20"
             >
-              <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-                <Info className="w-5 h-5 text-immich-primary" /> Asset Details
-              </h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <Info className="w-5 h-5 text-immich-primary" /> Asset Details
+                </h3>
+                <button
+                  onClick={() => setShowInfo(false)}
+                  className="p-1.5 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
+                  aria-label="Close details"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
               
               <div className="space-y-6">
                 <div className="space-y-1">
@@ -249,6 +256,15 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
                   </label>
                   <p className="text-sm text-white/80">{isVideo ? 'Video Clip' : 'High-Res Photo'}</p>
                 </div>
+
+                {asset?.originalFileName && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Original File Name</label>
+                    <p className="text-xs text-white/80 font-mono break-all bg-white/5 p-2 rounded">
+                      {asset.originalFileName}
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Asset Identifier</label>

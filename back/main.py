@@ -83,7 +83,7 @@ async def get_album_assets(album_id: str):
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
             '''
-            SELECT aa."assetId", aa."createdAt", a."type"
+            SELECT aa."assetId", aa."createdAt", a."type", a."originalFileName"
             FROM album_asset aa
             JOIN asset a ON a."id" = aa."assetId"
             WHERE aa."albumId" = $1
@@ -92,7 +92,7 @@ async def get_album_assets(album_id: str):
             album_id
         )
     
-    result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"]} for row in rows]
+    result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
     asset_cache[album_id] = (now, result)
     return result
 
@@ -129,7 +129,8 @@ async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-se
             SELECT DISTINCT ON (aa."assetId")
                 aa."assetId",
                 aa."createdAt",
-                a."type"
+                a."type",
+                a."originalFileName"
             FROM album_asset aa
             JOIN asset a ON a."id" = aa."assetId"
             WHERE aa."albumId" = ANY($1::uuid[])
@@ -138,7 +139,7 @@ async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-se
             normalized_ids
         )
 
-    result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"]} for row in rows]
+    result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
     result.sort(key=lambda item: (item["createdAt"], item["assetId"]), reverse=True)
 
     asset_cache[cache_key] = (now, result)
