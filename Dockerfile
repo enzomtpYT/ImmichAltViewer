@@ -24,6 +24,10 @@ COPY --from=frontend-build /app/front-react/dist ./front-react/dist
 # Expose the port
 EXPOSE 8000
 
+# Health check using the /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
 # Set the working directory to back where main.py is
 WORKDIR /app/back
 

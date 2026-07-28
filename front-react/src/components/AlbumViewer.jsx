@@ -161,46 +161,28 @@ function AlbumViewer() {
     setAllAssets([]);
 
     try {
-      const responses = await Promise.all(
-        idsToUse.map(async (id, sourceSortIndex) => {
-          const response = await fetch(`${API_URL}/albums/${id}/assets`);
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || `Server error: ${response.status}`);
-          }
-          const albumAssets = await response.json();
-          if (!Array.isArray(albumAssets)) {
-            throw new Error('Server returned invalid data format');
-          }
-          return albumAssets.map((asset) => ({
-            ...asset,
-            sourceAlbumId: id,
-            sourceAlbumName: getAlbumDisplayName(id),
-            sourceColor: getStableColorForAlbum(id),
-            sourceSortIndex,
-          }));
-        })
-      );
+      const response = await fetch(`${API_URL}/albums/assets?ids=${encodeURIComponent(idsToUse.join(','))}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server error: ${response.status}`);
+      }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Server returned invalid data format');
+      }
 
-      const dedupedByAssetId = new Map();
-      responses.flat().forEach((asset) => {
-        if (!dedupedByAssetId.has(asset.assetId)) {
-          dedupedByAssetId.set(asset.assetId, asset);
-        }
+      const formattedAssets = data.map((asset) => {
+        const albumId = asset.sourceAlbumId || idsToUse[0];
+        return {
+          ...asset,
+          sourceAlbumId: albumId,
+          sourceAlbumName: getAlbumDisplayName(albumId),
+          sourceColor: getStableColorForAlbum(albumId),
+        };
       });
 
-      const data = Array.from(dedupedByAssetId.values()).sort((a, b) => {
-        const byDate = new Date(b.createdAt) - new Date(a.createdAt);
-        if (byDate !== 0) return byDate;
-        return (a.sourceSortIndex ?? 0) - (b.sourceSortIndex ?? 0);
-      });
-
-      data.forEach((asset) => {
-        delete asset.sourceSortIndex;
-      });
-
-      setAllAssets(data);
-      if (data.length === 0) {
+      setAllAssets(formattedAssets);
+      if (formattedAssets.length === 0) {
         setError('No assets found in the selected albums');
       }
       setShowConfig(false);
