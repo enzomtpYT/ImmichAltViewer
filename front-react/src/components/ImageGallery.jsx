@@ -23,8 +23,11 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
   }, []);
 
   const columns = useMemo(() => {
-    if (containerWidth >= 768) return 4;
-    return 3;
+    if (containerWidth >= 1536) return 6;
+    if (containerWidth >= 1280) return 5;
+    if (containerWidth >= 1024) return 4;
+    if (containerWidth >= 640) return 3;
+    return 2;
   }, [containerWidth]);
 
   // Flat list of items (headers + image rows)
@@ -48,7 +51,7 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
             items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
           }
         }
-        items.push({ type: 'header', date: dateString });
+        items.push({ type: 'header', date: dateString, count: 0 });
         currentDate = dateString;
         currentAssets = [asset];
       } else {
@@ -60,6 +63,24 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
       for (let i = 0; i < currentAssets.length; i += columns) {
         items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
       }
+    }
+
+    // Populate count for each header
+    let currentHeaderIndex = -1;
+    let countAcc = 0;
+    items.forEach((item, index) => {
+      if (item.type === 'header') {
+        if (currentHeaderIndex !== -1) {
+          items[currentHeaderIndex].count = countAcc;
+        }
+        currentHeaderIndex = index;
+        countAcc = 0;
+      } else if (item.type === 'row') {
+        countAcc += item.assets.length;
+      }
+    });
+    if (currentHeaderIndex !== -1) {
+      items[currentHeaderIndex].count = countAcc;
     }
 
     return items;
@@ -83,13 +104,13 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     return cardWidth + 16;
   }, [containerWidth, columns]);
 
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // eslint-disable-next-library
   const rowVirtualizer = useVirtualizer({
     count: virtualData.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: (index) => virtualData[index].type === 'header' ? 76 : estimatedRowHeight,
+    estimateSize: (index) => virtualData[index].type === 'header' ? 68 : estimatedRowHeight,
     measureElement: (element) => element.getBoundingClientRect().height,
-    overscan: 10,
+    overscan: 8,
     gap: 0,
   });
 
@@ -125,11 +146,19 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
               }}
             >
               {item.type === 'header' ? (
-                <div className="flex items-center justify-between py-4 border-b border-white/5 mb-4 bg-[#0c0c0c] sticky top-0 z-10">
-                  <h2 className="text-xl font-bold text-white/80">{item.date}</h2>
+                <div className="flex items-center justify-between py-3 border-b border-white/10 mb-4 bg-[#0c0c0c]/90 backdrop-blur-md sticky top-0 z-10">
+                  <h2 className="text-lg md:text-xl font-bold text-white/90 tracking-tight">{item.date}</h2>
+                  {item.count > 0 && (
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/10 text-white/60">
+                      {item.count} {item.count === 1 ? 'item' : 'items'}
+                    </span>
+                  )}
                 </div>
               ) : (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                <div 
+                  className="grid gap-3 sm:gap-4"
+                  style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+                >
                   {item.assets.map((asset) => (
                     <ImageCard
                       key={asset.assetId}

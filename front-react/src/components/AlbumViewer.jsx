@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ImageGallery from './ImageGallery';
 import FullscreenViewer from './FullscreenViewer';
 import DateSlider from './DateSlider';
@@ -314,9 +314,28 @@ function AlbumViewer() {
     }
   }, [selectedAlbumIds]);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mediaTypeFilter, setMediaTypeFilter] = useState('ALL'); // 'ALL' | 'IMAGE' | 'VIDEO'
+
+  const filteredAssets = useMemo(() => {
+    return allAssets.filter((asset) => {
+      if (mediaTypeFilter === 'IMAGE' && asset.type !== 'IMAGE') return false;
+      if (mediaTypeFilter === 'VIDEO' && asset.type !== 'VIDEO') return false;
+
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const filename = (asset.originalFileName || '').toLowerCase();
+        const assetId = asset.assetId.toLowerCase();
+        if (!filename.includes(query) && !assetId.includes(query)) return false;
+      }
+
+      return true;
+    });
+  }, [allAssets, mediaTypeFilter, searchQuery]);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <header className="flex-none z-30 bg-black/40 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
+      <header className="flex-none z-30 bg-black/40 backdrop-blur-md border-b border-white/10 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-immich-primary p-2 rounded-lg">
             <ImageIcon className="w-5 h-5 text-white" />
@@ -326,31 +345,57 @@ function AlbumViewer() {
             {allAssets.length > 0 && (
               <div className="flex flex-col">
                 <p className="text-xs text-white/40 font-medium">
-                  {allAssets.length.toLocaleString()} Memories
+                  {filteredAssets.length.toLocaleString()} {filteredAssets.length === allAssets.length ? 'Memories' : `of ${allAssets.length.toLocaleString()} Memories`}
                 </p>
-                {selectedAlbumIds.length > 1 && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 max-w-md">
-                    {selectedAlbumIds.map(id => {
-                      const album = savedAlbums.find(a => a.id === id);
-                      if (!album) return null;
-                      return (
-                        <div key={id} className="flex items-center gap-1.5 min-w-0">
-                          <div 
-                            className="w-1.5 h-1.5 rounded-full flex-none" 
-                            style={{ backgroundColor: getStableColorForAlbum(id) }}
-                          />
-                          <span className="text-[10px] text-white/30 truncate max-w-[100px]">{album.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        {allAssets.length > 0 && (
+          <div className="flex items-center gap-2 flex-1 max-w-md mx-0 md:mx-4">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search by file name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-immich-primary/50 transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5 text-xs">
+              <button
+                onClick={() => setMediaTypeFilter('ALL')}
+                className={`px-2.5 py-1 rounded-md transition-colors font-medium text-[11px] ${mediaTypeFilter === 'ALL' ? 'bg-immich-primary text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setMediaTypeFilter('IMAGE')}
+                className={`px-2.5 py-1 rounded-md transition-colors font-medium text-[11px] ${mediaTypeFilter === 'IMAGE' ? 'bg-immich-primary text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                Photos
+              </button>
+              <button
+                onClick={() => setMediaTypeFilter('VIDEO')}
+                className={`px-2.5 py-1 rounded-md transition-colors font-medium text-[11px] ${mediaTypeFilter === 'VIDEO' ? 'bg-immich-primary text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                Videos
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-4 self-end md:self-auto">
           <button 
             onClick={() => setShowConfig(!showConfig)}
             className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -510,11 +555,11 @@ function AlbumViewer() {
           </div>
         )}
 
-        {allAssets.length > 0 ? (
+        {filteredAssets.length > 0 ? (
           <div className="h-full flex">
             <div className="flex-1 min-w-0">
               <ImageGallery 
-                assets={allAssets} 
+                assets={filteredAssets} 
                 apiKey={apiKey}
                 jumpToDateRequest={jumpToDateRequest}
                 onFullscreen={(asset, index) => {
@@ -526,12 +571,24 @@ function AlbumViewer() {
             {!isMobile && (
               <div className="w-64 border-l border-white/5 bg-black/20">
                 <DateSlider
-                  assets={allAssets}
+                  assets={filteredAssets}
                   onDateSelect={handleDateSelect}
                   compact={false}
                 />
               </div>
             )}
+          </div>
+        ) : allAssets.length > 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-white/40 p-8 text-center">
+            <ImageIcon className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-lg font-medium text-white/80">No matching assets found</p>
+            <p className="text-sm text-white/40">Try clearing your search query or media type filter</p>
+            <button 
+              onClick={() => { setSearchQuery(''); setMediaTypeFilter('ALL'); }}
+              className="mt-4 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              Reset Filters
+            </button>
           </div>
         ) : !initialLoading && (
           <div className="flex flex-col items-center justify-center h-full text-white/20 p-8 text-center">
@@ -550,13 +607,13 @@ function AlbumViewer() {
 
       {fullscreenAsset && (
         <FullscreenViewer
-          assets={allAssets}
+          assets={filteredAssets}
           currentIndex={fullscreenIndex}
           apiKey={apiKey}
           onClose={() => setFullscreenAsset(null)}
           onNavigate={(newIndex) => {
             setFullscreenIndex(newIndex);
-            setFullscreenAsset(allAssets[newIndex]);
+            setFullscreenAsset(filteredAssets[newIndex]);
           }}
         />
       )}
