@@ -290,7 +290,7 @@ async def proxy_thumbnail(asset_id: str, api_key: str):
         iter([response.content]),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
-            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+            "Cache-Control": "public, max-age=604800, immutable",
             "ETag": f'"{asset_id}-thumb"',
         }
     )
@@ -317,7 +317,7 @@ async def proxy_preview(asset_id: str, api_key: str):
         iter([response.content]),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
-            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+            "Cache-Control": "public, max-age=604800, immutable",
             "ETag": f'"{asset_id}-preview"',
         }
     )
@@ -344,8 +344,8 @@ async def proxy_fullsize(asset_id: str, api_key: str):
         iter([response.content]),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
-            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
-            "ETag": f'"{ asset_id}-fullsize"',
+            "Cache-Control": "public, max-age=604800, immutable",
+            "ETag": f'"{asset_id}-fullsize"',
         }
     )
 
