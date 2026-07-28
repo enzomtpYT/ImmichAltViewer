@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Maximize2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Maximize2, Download } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
 
@@ -154,13 +154,22 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
 
         <div className="flex items-center gap-2">
           <button 
+            onClick={handleDownload}
+            title="Download asset"
+            className="p-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
+          >
+            <Download className="w-5 h-5" />
+          </button>
+          <button 
             onClick={() => setShowInfo(!showInfo)}
+            title="Asset Info (i)"
             className={`p-2 rounded-full transition-colors ${showInfo ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
           >
             <Info className="w-5 h-5" />
           </button>
           <button 
             onClick={onClose}
+            title="Close (Esc)"
             className="p-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
           >
             <X className="w-5 h-5" />

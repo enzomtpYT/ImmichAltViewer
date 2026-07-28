@@ -146,6 +146,127 @@ async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-se
     return result
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for container / system monitoring"""
+    db_status = "ok"
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    immich_status = "configured" if IMMICH_URL else "missing_url"
+
+    return {
+        "status": "healthy" if db_status == "ok" else "degraded",
+        "database": db_status,
+        "immich": immich_status,
+        "cached_albums": len(asset_cache)
+    }
+
+
+@app.get("/albums/{album_id}/stats")
+async def get_album_stats(album_id: str):
+    """Get total count, media types count, and upload date range for an album"""
+    try:
+        UUID(album_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid album UUID format")
+
+    async with db_pool.acquire() as conn:
+        stats = await conn.fetchrow(
+            '''
+            SELECT 
+                COUNT(aa."assetId") AS total_count,
+                COUNT(CASE WHEN a."type" = 'IMAGE' THEN 1 END) AS image_count,
+                COUNT(CASE WHEN a."type" = 'VIDEO' THEN 1 END) AS video_count,
+                MIN(aa."createdAt") AS earliest_upload,
+                MAX(aa."createdAt") AS latest_upload
+            FROM album_asset aa
+            JOIN asset a ON a."id" = aa."assetId"
+            WHERE aa."albumId" = $1
+            ''',
+            album_id
+        )
+
+    if not stats or stats["total_count"] == 0:
+        return {
+            "albumId": album_id,
+            "totalCount": 0,
+            "imageCount": 0,
+            "videoCount": 0,
+            "earliestUpload": None,
+            "latestUpload": None
+        }
+
+    return {
+        "albumId": album_id,
+        "totalCount": stats["total_count"],
+        "imageCount": stats["image_count"],
+        "videoCount": stats["video_count"],
+        "earliestUpload": stats["earliest_upload"],
+        "latestUpload": stats["latest_upload"]
+    }
+
+
+@app.get("/albums/{album_id}/assets/search")
+async def search_album_assets(
+    album_id: str,
+    query: str = Query(None, description="Filename query"),
+    media_type: str = Query(None, description="IMAGE or VIDEO"),
+    limit: int = Query(100, ge=1, le=1000)
+):
+    """Search/filter assets in an album by filename or type"""
+    try:
+        UUID(album_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid album UUID format")
+
+    sql = '''
+        SELECT aa."assetId", aa."createdAt", a."type", a."originalFileName"
+        FROM album_asset aa
+        JOIN asset a ON a."id" = aa."assetId"
+        WHERE aa."albumId" = $1
+    '''
+    params = [album_id]
+
+    if media_type and media_type.upper() in ("IMAGE", "VIDEO"):
+        params.append(media_type.upper())
+        sql += f' AND a."type" = ${len(params)}'
+
+    if query and query.strip():
+        params.append(f"%{query.strip()}%")
+        sql += f' AND a."originalFileName" ILIKE ${len(params)}'
+
+    sql += ' ORDER BY aa."createdAt" DESC'
+    params.append(limit)
+    sql += f' LIMIT ${len(params)}'
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(sql, *params)
+
+    return [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
+
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Returns in-memory asset cache statistics"""
+    return {
+        "cachedEntries": len(asset_cache),
+        "ttlSeconds": CACHE_TTL,
+        "keys": list(asset_cache.keys())
+    }
+
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clears in-memory asset cache"""
+    count = len(asset_cache)
+    asset_cache.clear()
+    return {"message": "Cache cleared successfully", "clearedEntries": count}
+
+
 
 @app.get("/proxy/thumbnail/{asset_id}")
 async def proxy_thumbnail(asset_id: str, api_key: str):
