@@ -76,3 +76,27 @@ IMMICH_URL=http://192.168.1.110:2283
 # (Needed to fetch Date Uploaded, which isn't in the API yet)
 DATABASE_URL=postgresql://immich:yourpassword@192.168.1.110:5432/immich
 ```
+
+## 🌐 Reverse Proxy Subpath Setup (e.g., `photos.example.com/cim`)
+
+The frontend assets use relative pathing (`base: './'`), making it easy to serve behind a subpath reverse proxy.
+
+### Nginx Example
+```nginx
+location /cim/ {
+    proxy_pass http://127.0.0.1:8090/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+### Caddy Example
+```caddy
+photos.example.com {
+    handle_path /cim/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+}
+```
