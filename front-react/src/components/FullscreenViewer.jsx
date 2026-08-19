@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Maximize2, Download } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
 
@@ -15,6 +15,33 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   useEffect(() => {
     setIndex(currentIndex);
   }, [currentIndex]);
+
+  const [autoSlide, setAutoSlide] = useState(false);
+  const [showSlideSettings, setShowSlideSettings] = useState(false);
+  const [slideInterval, setSlideInterval] = useState(() => {
+    try {
+      const stored = parseInt(localStorage.getItem('immich_slide_interval'), 10);
+      return Number.isFinite(stored) && stored > 0 ? stored : 5;
+    } catch {
+      return 5;
+    }
+  });
+  const [videoAdvanceMode, setVideoAdvanceMode] = useState(() => {
+    try {
+      const stored = localStorage.getItem('immich_video_advance_mode');
+      return stored === 'interval' ? 'interval' : 'after-end';
+    } catch {
+      return 'after-end';
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('immich_slide_interval', String(slideInterval)); } catch { /* ignore */ }
+  }, [slideInterval]);
+
+  useEffect(() => {
+    try { localStorage.setItem('immich_video_advance_mode', videoAdvanceMode); } catch { /* ignore */ }
+  }, [videoAdvanceMode]);
 
   // Preload nearby images in both directions (skip videos)
   useEffect(() => {
@@ -65,6 +92,35 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     document.body.removeChild(link);
   }, [asset, fullsizeUrl, isVideo]);
 
+  const toggleAutoSlide = useCallback(() => {
+    setAutoSlide(prev => !prev);
+  }, []);
+
+  const handleVideoEnded = useCallback(() => {
+    if (!autoSlide || videoAdvanceMode !== 'after-end') return;
+    if (index < assets.length - 1) {
+      goToNext();
+    } else {
+      setAutoSlide(false);
+    }
+  }, [autoSlide, videoAdvanceMode, index, assets.length, goToNext]);
+
+  // Auto-slide timer. Videos in 'after-end' mode advance via onEnded instead.
+  useEffect(() => {
+    if (!autoSlide) return;
+    if (isVideo && videoAdvanceMode === 'after-end') return;
+
+    const timeout = setTimeout(() => {
+      if (index < assets.length - 1) {
+        goToNext();
+      } else {
+        setAutoSlide(false);
+      }
+    }, slideInterval * 1000);
+
+    return () => clearTimeout(timeout);
+  }, [autoSlide, index, isVideo, videoAdvanceMode, slideInterval, assets.length, goToNext]);
+
   useEffect(() => {
     const handleKeyboard = (e) => {
       if (e.key === 'Escape') onClose();
@@ -72,6 +128,12 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       else if (e.key === 'ArrowRight') goToNext();
       else if (e.key === 'ArrowDown') handleDownload();
       else if (e.key === 'i') setShowInfo(prev => !prev);
+      else if (e.key === ' ') {
+        const target = e.target;
+        if (target && (target.tagName === 'VIDEO' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+        e.preventDefault();
+        toggleAutoSlide();
+      }
     };
 
     document.addEventListener('keydown', handleKeyboard);
@@ -80,7 +142,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       document.removeEventListener('keydown', handleKeyboard);
       document.body.style.overflow = 'auto';
     };
-  }, [onClose, goToPrevious, goToNext, handleDownload]);
+  }, [onClose, goToPrevious, goToNext, handleDownload, toggleAutoSlide]);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length !== 1) return;
@@ -154,6 +216,20 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
 
         <div className="flex items-center gap-2">
           <button 
+            onClick={toggleAutoSlide}
+            title={autoSlide ? 'Pause slideshow (Space)' : 'Start slideshow (Space)'}
+            className={`p-2 rounded-full transition-colors ${autoSlide ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+          >
+            {autoSlide ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+          </button>
+          <button 
+            onClick={() => setShowSlideSettings(!showSlideSettings)}
+            title="Slideshow settings"
+            className={`p-2 rounded-full transition-colors ${showSlideSettings ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+          >
+            <SlidersHorizontal className="w-5 h-5" />
+          </button>
+          <button 
             onClick={handleDownload}
             title="Download asset"
             className="p-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
@@ -176,6 +252,98 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
           </button>
         </div>
       </div>
+
+      {/* Slideshow Settings Panel */}
+      <AnimatePresence>
+        {showSlideSettings && (
+          <Motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="absolute top-20 right-4 z-[70] w-80 rounded-2xl border border-white/10 bg-black/90 backdrop-blur-2xl p-5 space-y-5 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white/90 flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-immich-primary" /> Slideshow
+              </h3>
+              <button
+                onClick={() => setShowSlideSettings(false)}
+                className="p-1.5 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
+                aria-label="Close slideshow settings"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-white/70">Auto-slide</span>
+              <button
+                role="switch"
+                aria-checked={autoSlide}
+                onClick={toggleAutoSlide}
+                className={`relative h-6 w-11 rounded-full transition-colors flex-none ${autoSlide ? 'bg-immich-primary' : 'bg-white/15'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoSlide ? 'translate-x-5' : ''}`} />
+              </button>
+            </label>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/70 block">Slide interval</label>
+              <div className="flex flex-wrap gap-1.5">
+                {[3, 5, 10, 15, 30].map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => setSlideInterval(sec)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${slideInterval === sec ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+                  >
+                    {sec}s
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={600}
+                  value={slideInterval}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (Number.isFinite(val) && val > 0) setSlideInterval(val);
+                  }}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-immich-primary/50 transition-colors"
+                />
+                <span className="text-xs text-white/40 flex-none">seconds</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/70 block">Videos</label>
+              <div className="space-y-1.5">
+                <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${videoAdvanceMode === 'after-end' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                  <input
+                    type="radio"
+                    name="videoAdvance"
+                    checked={videoAdvanceMode === 'after-end'}
+                    onChange={() => setVideoAdvanceMode('after-end')}
+                    className="accent-immich-primary"
+                  />
+                  <span className="text-xs text-white/80">Slide right after video ends</span>
+                </label>
+                <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${videoAdvanceMode === 'interval' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                  <input
+                    type="radio"
+                    name="videoAdvance"
+                    checked={videoAdvanceMode === 'interval'}
+                    onChange={() => setVideoAdvanceMode('interval')}
+                    className="accent-immich-primary"
+                  />
+                  <span className="text-xs text-white/80">Slide after interval (same as images)</span>
+                </label>
+              </div>
+            </div>
+          </Motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
       <div
@@ -213,6 +381,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               controls
               autoPlay
               playsInline
+              onEnded={handleVideoEnded}
             />
           ) : (
             <img 
