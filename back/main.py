@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse
 import asyncpg
 from pathlib import Path
 import httpx
@@ -21,14 +22,20 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 app = FastAPI()
 
-# Enable CORS
+# CORS: explicit origins from env (comma-separated); fall back to "*" (no credentials).
+# The frontend is served same-origin in production, so CORS is only needed for the dev server.
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+allow_all = "*" in CORS_ORIGINS or not CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
+    allow_origins=["*"] if allow_all else CORS_ORIGINS,
+    allow_credentials=not allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compress JSON API responses (asset lists benefit greatly)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Configuration from Environment Variables
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -45,41 +52,80 @@ print(f"DATABASE_URL: {DATABASE_URL}")
 http_client = None
 db_pool = None
 
-@app.on_event("startup")
-async def startup_event():
+# Simple in-memory cache with TTL and LRU eviction
+import time
+import asyncio
+from contextlib import asynccontextmanager
+asset_cache = {}  # {cache_key: (timestamp, data)}
+CACHE_TTL = 60  # seconds
+MAX_CACHE_ENTRIES = 500
+
+def cache_put(key, value):
+    """Insert into the cache, bumping LRU order and evicting oldest entries over the cap."""
+    now = time.time()
+    if key in asset_cache:
+        del asset_cache[key]
+    asset_cache[key] = (now, value)
+    while len(asset_cache) > MAX_CACHE_ENTRIES:
+        asset_cache.pop(next(iter(asset_cache)))
+
+
+def cache_get(key):
+    """Return cached data if fresh, else None. Refreshes LRU order on hit."""
+    entry = asset_cache.get(key)
+    if entry is None:
+        return None
+    timestamp, data = entry
+    if time.time() - timestamp >= CACHE_TTL:
+        asset_cache.pop(key, None)
+        return None
+    # Refresh LRU position
+    del asset_cache[key]
+    asset_cache[key] = entry
+    return data
+
+
+async def create_db_pool_with_retry(url, retries=10, delay=3.0):
+    """Create the asyncpg pool, retrying with backoff so a momentarily-down DB
+    doesn't crash-loop the container at startup."""
+    for attempt in range(retries):
+        try:
+            return await asyncpg.create_pool(url)
+        except Exception as e:  # noqa: BLE001 - retry any transient startup failure
+            if attempt == retries - 1:
+                raise
+            print(f"DB connection failed (attempt {attempt + 1}/{retries}): {e}. Retrying in {delay}s...")
+            await asyncio.sleep(delay)
+
+
+@asynccontextmanager
+async def lifespan(app):
     global http_client, db_pool
-    # Create a shared client with connection pooling
     http_client = httpx.AsyncClient(
         limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
-        timeout=httpx.Timeout(10.0)
+        # Per-connection timeouts: generous read window for large originals/videos
+        timeout=httpx.Timeout(connect=5.0, read=120.0, write=30.0, pool=10.0),
     )
-    # Create database connection pool
-    db_pool = await asyncpg.create_pool(DATABASE_URL)
+    db_pool = await create_db_pool_with_retry(DATABASE_URL)
     # Clear cache on reload
     asset_cache.clear()
+    try:
+        yield
+    finally:
+        if http_client:
+            await http_client.aclose()
+        if db_pool:
+            await db_pool.close()
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    global http_client, db_pool
-    if http_client:
-        await http_client.aclose()
-    if db_pool:
-        await db_pool.close()
-
-# Simple in-memory cache with TTL
-import time
-asset_cache = {}  # {album_id: (timestamp, data)}
-CACHE_TTL = 60  # seconds
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/albums/{album_id}/assets")
 async def get_album_assets(album_id: str):
-    # Check cache first (with TTL)
-    now = time.time()
-    if album_id in asset_cache:
-        cached_time, cached_data = asset_cache[album_id]
-        if now - cached_time < CACHE_TTL:
-            return cached_data
-        
+    # Check cache first (with TTL + LRU eviction)
+    cached = cache_get(album_id)
+    if cached is not None:
+        return cached
+
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
             '''
@@ -91,9 +137,9 @@ async def get_album_assets(album_id: str):
             ''',
             album_id
         )
-    
+
     result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
-    asset_cache[album_id] = (now, result)
+    cache_put(album_id, result)
     return result
 
 
@@ -117,11 +163,9 @@ async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-se
     normalized_ids = sorted(set(valid_album_ids))
     cache_key = f"multi:{','.join(normalized_ids)}"
 
-    now = time.time()
-    if cache_key in asset_cache:
-        cached_time, cached_data = asset_cache[cache_key]
-        if now - cached_time < CACHE_TTL:
-            return cached_data
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
@@ -142,7 +186,7 @@ async def get_multiple_albums_assets(ids: str = Query(..., description="Comma-se
     result = [{"assetId": row["assetId"], "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
     result.sort(key=lambda item: (item["createdAt"], item["assetId"]), reverse=True)
 
-    asset_cache[cache_key] = (now, result)
+    cache_put(cache_key, result)
     return result
 
 
@@ -254,6 +298,7 @@ async def get_cache_stats():
     """Returns in-memory asset cache statistics"""
     return {
         "cachedEntries": len(asset_cache),
+        "maxEntries": MAX_CACHE_ENTRIES,
         "ttlSeconds": CACHE_TTL,
         "keys": list(asset_cache.keys())
     }
@@ -268,26 +313,57 @@ async def clear_cache():
 
 
 
+def resolve_api_key(api_key: str | None, x_api_key: str | None) -> str:
+    """Prefer the X-Api-Key header; fall back to the legacy query param.
+    Sanitize to ASCII to avoid encoding issues in HTTP headers."""
+    return (x_api_key or api_key or "").encode('ascii', 'ignore').decode('ascii').strip()
+
+
+async def stream_immich_bytes(response):
+    """Yield the upstream response body in chunks and always release the connection."""
+    try:
+        async for chunk in response.aiter_bytes():
+            yield chunk
+    finally:
+        await response.aclose()
+
+
+async def fetch_stream(url, headers=None, params=None, timeout=None):
+    """Issue a streaming GET through the shared pooled client.
+
+    Per-request timeout is applied via build_request (stored in request
+    extensions, honored by the transport); send(stream=True) keeps the body
+    off-heap so we can stream it to the client."""
+    kwargs = {"headers": headers, "params": params}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    req = http_client.build_request("GET", url, **kwargs)
+    return await http_client.send(req, stream=True)
+
+
+VIDEO_TIMEOUT = httpx.Timeout(connect=5.0, read=300.0, write=30.0, pool=10.0)
+
+
 @app.get("/proxy/thumbnail/{asset_id}")
-async def proxy_thumbnail(asset_id: str, api_key: str):
+async def proxy_thumbnail(asset_id: str, api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
     """Proxy endpoint to fetch Immich thumbnails with authentication"""
-    
-    # Sanitize API key to remove non-ASCII characters
-    api_key_clean = api_key.encode('ascii', 'ignore').decode('ascii').strip()
-    
+    key = resolve_api_key(api_key, x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
     immich_url = f"{IMMICH_URL}/api/assets/{asset_id}/thumbnail"
-    headers = {"x-api-key": api_key_clean}
+    headers = {"x-api-key": key}
     params = {"size": "thumbnail"}
-    
-    # Stream the response instead of loading all into memory
-    response = await http_client.get(immich_url, headers=headers, params=params)
-    
+
+    response = await fetch_stream(immich_url, headers=headers, params=params)
+
     if response.status_code != 200:
+        await response.aclose()
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch thumbnail")
-    
-    # Return streaming response with caching headers
+
+    # Stream chunks instead of buffering the whole image in memory
     return StreamingResponse(
-        iter([response.content]),
+        stream_immich_bytes(response),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
             "Cache-Control": "public, max-age=604800, immutable",
@@ -296,25 +372,25 @@ async def proxy_thumbnail(asset_id: str, api_key: str):
     )
 
 @app.get("/proxy/preview/{asset_id}")
-async def proxy_preview(asset_id: str, api_key: str):
+async def proxy_preview(asset_id: str, api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
     """Proxy endpoint to fetch Immich preview images with authentication"""
-    
-    # Sanitize API key to remove non-ASCII characters
-    api_key_clean = api_key.encode('ascii', 'ignore').decode('ascii').strip()
-    
+    key = resolve_api_key(api_key, x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
     immich_url = f"{IMMICH_URL}/api/assets/{asset_id}/thumbnail"
-    headers = {"x-api-key": api_key_clean}
+    headers = {"x-api-key": key}
     params = {"size": "preview"}
-    
-    # Stream the response instead of loading all into memory
-    response = await http_client.get(immich_url, headers=headers, params=params)
-    
+
+    response = await fetch_stream(immich_url, headers=headers, params=params)
+
     if response.status_code != 200:
+        await response.aclose()
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch preview")
-    
-    # Return streaming response with caching headers
+
+    # Stream chunks instead of buffering the whole image in memory
     return StreamingResponse(
-        iter([response.content]),
+        stream_immich_bytes(response),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
             "Cache-Control": "public, max-age=604800, immutable",
@@ -323,25 +399,25 @@ async def proxy_preview(asset_id: str, api_key: str):
     )
 
 @app.get("/proxy/fullsize/{asset_id}")
-async def proxy_fullsize(asset_id: str, api_key: str):
+async def proxy_fullsize(asset_id: str, api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
     """Proxy endpoint to fetch Immich full-size images with authentication"""
-    
-    # Sanitize API key to remove non-ASCII characters
-    api_key_clean = api_key.encode('ascii', 'ignore').decode('ascii').strip()
-    
+    key = resolve_api_key(api_key, x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
     # Use /original endpoint for full-size images
     immich_url = f"{IMMICH_URL}/api/assets/{asset_id}/original"
-    headers = {"x-api-key": api_key_clean}
-    
-    # Stream the response instead of loading all into memory
-    response = await http_client.get(immich_url, headers=headers)
-    
+    headers = {"x-api-key": key}
+
+    response = await fetch_stream(immich_url, headers=headers)
+
     if response.status_code != 200:
+        await response.aclose()
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch fullsize image")
-    
-    # Return streaming response with caching headers
+
+    # Stream chunks instead of buffering the whole image in memory
     return StreamingResponse(
-        iter([response.content]),
+        stream_immich_bytes(response),
         media_type=response.headers.get("content-type", "image/jpeg"),
         headers={
             "Cache-Control": "public, max-age=604800, immutable",
@@ -350,45 +426,42 @@ async def proxy_fullsize(asset_id: str, api_key: str):
     )
 
 @app.get("/proxy/video/{asset_id}")
-async def proxy_video(asset_id: str, api_key: str, request: Request):
+async def proxy_video(asset_id: str, request: Request, api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
     """Proxy endpoint to stream Immich videos with Range request support"""
-    
-    api_key_clean = api_key.encode('ascii', 'ignore').decode('ascii').strip()
+    key = resolve_api_key(api_key, x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
     immich_url = f"{IMMICH_URL}/api/assets/{asset_id}/video/playback"
-    headers = {"x-api-key": api_key_clean}
-    
+    headers = {"x-api-key": key}
+
     # Forward Range header if present (needed for video seeking)
     range_header = request.headers.get("range")
     if range_header:
         headers["Range"] = range_header
-    
-    # Use a longer timeout for video
-    video_client = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
-    try:
-        response = await video_client.get(immich_url, headers=headers)
-    finally:
-        await video_client.aclose()
-    
+
+    # Stream through the shared pooled client with a long read timeout for videos
+    response = await fetch_stream(immich_url, headers=headers, timeout=VIDEO_TIMEOUT)
+
     if response.status_code not in (200, 206):
+        await response.aclose()
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch video")
-    
+
     response_headers = {
         "Cache-Control": "public, max-age=86400",
         "Accept-Ranges": "bytes",
     }
-    
+
     # Forward content headers from Immich
     for header in ["Content-Range", "Content-Length", "Content-Type"]:
         if header.lower() in response.headers:
             response_headers[header] = response.headers[header.lower()]
-    
-    content_type = response.headers.get("content-type", "video/mp4")
-    
-    return Response(
-        content=response.content,
+
+    return StreamingResponse(
+        stream_immich_bytes(response),
         status_code=response.status_code,
         headers=response_headers,
-        media_type=content_type,
+        media_type=response.headers.get("content-type", "video/mp4"),
     )
 
 # Mount frontend static files

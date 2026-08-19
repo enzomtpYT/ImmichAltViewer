@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import ImageCard from './ImageCard';
+import { formatDateKey } from '../utils/dates';
 
 function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
   const parentRef = useRef(null);
@@ -35,35 +36,30 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
     const items = [];
     let currentDate = null;
     let currentAssets = [];
+    let runningIndex = 0;
+
+    const flushRows = () => {
+      if (currentAssets.length === 0) return;
+      for (let i = 0; i < currentAssets.length; i += columns) {
+        items.push({ type: 'row', assets: currentAssets.slice(i, i + columns), startIndex: runningIndex + i });
+      }
+      runningIndex += currentAssets.length;
+      currentAssets = [];
+    };
 
     assets.forEach((asset) => {
-      const assetDate = new Date(asset.createdAt);
-      const dateString = assetDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
+      const dateString = asset._dateKey || formatDateKey(asset.createdAt);
 
       if (dateString !== currentDate) {
-        if (currentAssets.length > 0) {
-          for (let i = 0; i < currentAssets.length; i += columns) {
-            items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
-          }
-        }
+        flushRows();
         items.push({ type: 'header', date: dateString, count: 0 });
         currentDate = dateString;
-        currentAssets = [asset];
+        currentAssets.push(asset);
       } else {
         currentAssets.push(asset);
       }
     });
-
-    if (currentAssets.length > 0) {
-      for (let i = 0; i < currentAssets.length; i += columns) {
-        items.push({ type: 'row', assets: currentAssets.slice(i, i + columns) });
-      }
-    }
+    flushRows();
 
     // Populate count for each header
     let currentHeaderIndex = -1;
@@ -159,15 +155,12 @@ function ImageGallery({ assets, apiKey, onFullscreen, jumpToDateRequest }) {
                   className="grid gap-3 sm:gap-4"
                   style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
                 >
-                  {item.assets.map((asset) => (
+                  {item.assets.map((asset, i) => (
                     <ImageCard
                       key={asset.assetId}
                       asset={asset}
                       apiKey={apiKey}
-                      onFullscreen={(targetAsset) => {
-                        const globalIndex = assets.findIndex(a => a.assetId === targetAsset.assetId);
-                        onFullscreen(targetAsset, globalIndex);
-                      }}
+                      onFullscreen={(targetAsset) => onFullscreen(targetAsset, item.startIndex + i)}
                     />
                   ))}
                   {/* Fill empty slots in grid if row is shorter than responsive column count */}
