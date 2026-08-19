@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import ImageGallery from './ImageGallery';
 import FullscreenViewer from './FullscreenViewer';
 import DateSlider from './DateSlider';
-import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X } from 'lucide-react';
+import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X, Keyboard } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
 const ALBUM_COLOR_PALETTE = [
@@ -25,6 +25,15 @@ const getStableColorForAlbum = (albumId) => {
   }
   return ALBUM_COLOR_PALETTE[hash % ALBUM_COLOR_PALETTE.length];
 };
+
+function ShortcutRow({ keys, action }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-xs text-white/70">{action}</span>
+      <kbd className="flex-none min-w-[3.5rem] rounded-md border border-white/15 bg-white/5 px-2 py-1 text-center font-mono text-[11px] text-white/80">{keys}</kbd>
+    </div>
+  );
+}
 
 function AlbumViewer() {
   const isMobile = window.innerWidth <= 768;
@@ -67,6 +76,7 @@ function AlbumViewer() {
   const [fullscreenAsset, setFullscreenAsset] = useState(null);
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
   const [showConfig, setShowConfig] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [jumpToDateRequest, setJumpToDateRequest] = useState(null);
   const [showMobileTimeline, setShowMobileTimeline] = useState(false);
 
@@ -220,6 +230,25 @@ function AlbumViewer() {
       }
     }
   }, [loadAlbum, loadSelectedAlbums, allAssets.length, initialLoading]);
+
+  // Global shortcut to toggle the keyboard shortcuts dialog
+  useEffect(() => {
+    const handleGlobalKeys = (e) => {
+      const target = e.target;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (e.key === '?') {
+        if (!isTyping) {
+          e.preventDefault();
+          setShowHelp(prev => !prev);
+        }
+      } else if (e.key === 'Escape') {
+        setShowHelp(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeys);
+    return () => document.removeEventListener('keydown', handleGlobalKeys);
+  }, []);
 
   const handleDateSelect = (dateString) => {
     const targetAssetIndex = allAssets.findIndex((asset) => {
@@ -378,6 +407,14 @@ function AlbumViewer() {
         )}
 
         <div className="flex items-center gap-4 self-end md:self-auto">
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            title="Keyboard shortcuts"
+            aria-label="Keyboard shortcuts"
+          >
+            <Keyboard className={`w-5 h-5 ${showHelp ? 'text-immich-primary' : 'text-white/60'}`} />
+          </button>
           <button 
             onClick={() => setShowConfig(!showConfig)}
             className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -639,6 +676,45 @@ function AlbumViewer() {
             </div>
           )}
         </>
+      )}
+
+      {showHelp && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <button
+            className="absolute inset-0"
+            onClick={() => setShowHelp(false)}
+            aria-label="Close keyboard shortcuts"
+          />
+          <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#0c0c0c] shadow-2xl overflow-hidden animate-fade-in">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <Keyboard className="w-4 h-4 text-immich-primary" /> Keyboard Shortcuts
+              </h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="p-1.5 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
+                aria-label="Close keyboard shortcuts"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-5 space-y-6">
+              <section className="space-y-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Gallery</h3>
+                <ShortcutRow keys="Enter" action="Open focused image in fullscreen" />
+                <ShortcutRow keys="?" action="Show / hide this shortcuts list" />
+              </section>
+              <section className="space-y-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Fullscreen Viewer</h3>
+                <ShortcutRow keys="Esc" action="Close / leave fullscreen" />
+                <ShortcutRow keys="←  →" action="Previous / next asset" />
+                <ShortcutRow keys="Space" action="Start / pause slideshow" />
+                <ShortcutRow keys="↓" action="Download asset" />
+                <ShortcutRow keys="I" action="Toggle asset info panel" />
+              </section>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

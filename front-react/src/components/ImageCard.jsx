@@ -17,10 +17,21 @@ const ImageCard = memo(({ asset, apiKey, onFullscreen }) => {
     setRetryKey(prev => prev + 1);
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onFullscreen(asset);
+    }
+  };
+
   return (
     <div 
-      className="group relative w-full aspect-square overflow-hidden rounded-xl bg-white/5 cursor-pointer ring-1 ring-white/10 md:hover:ring-immich-primary/50 transition-all duration-300 shadow-md"
+      className="group relative w-full aspect-square overflow-hidden rounded-xl bg-white/5 cursor-pointer ring-1 ring-white/10 md:hover:ring-immich-primary/50 transition-all duration-300 shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-immich-primary"
       onClick={() => onFullscreen(asset)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      aria-label={isVideo ? `Open video in fullscreen` : `Open photo in fullscreen`}
     >
       {/* Loading Skeleton */}
       {!loaded && !error && (
