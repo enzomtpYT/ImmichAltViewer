@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal, ArrowLeft, ArrowRight } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
 
@@ -34,6 +34,14 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       return 'after-end';
     }
   });
+  const [slideDirection, setSlideDirection] = useState(() => {
+    try {
+      const stored = localStorage.getItem('immich_slide_direction');
+      return stored === 'backward' ? 'backward' : 'forward';
+    } catch {
+      return 'forward';
+    }
+  });
 
   useEffect(() => {
     try { localStorage.setItem('immich_slide_interval', String(slideInterval)); } catch { /* ignore */ }
@@ -42,6 +50,10 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   useEffect(() => {
     try { localStorage.setItem('immich_video_advance_mode', videoAdvanceMode); } catch { /* ignore */ }
   }, [videoAdvanceMode]);
+
+  useEffect(() => {
+    try { localStorage.setItem('immich_slide_direction', slideDirection); } catch { /* ignore */ }
+  }, [slideDirection]);
 
   // Preload nearby images in both directions (skip videos)
   useEffect(() => {
@@ -96,14 +108,24 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     setAutoSlide(prev => !prev);
   }, []);
 
-  const handleVideoEnded = useCallback(() => {
-    if (!autoSlide || videoAdvanceMode !== 'after-end') return;
-    if (index < assets.length - 1) {
+  const advanceSlide = useCallback(() => {
+    if (slideDirection === 'backward') {
+      if (index > 0) {
+        goToPrevious();
+      } else {
+        setAutoSlide(false);
+      }
+    } else if (index < assets.length - 1) {
       goToNext();
     } else {
       setAutoSlide(false);
     }
-  }, [autoSlide, videoAdvanceMode, index, assets.length, goToNext]);
+  }, [slideDirection, index, assets.length, goToPrevious, goToNext]);
+
+  const handleVideoEnded = useCallback(() => {
+    if (!autoSlide || videoAdvanceMode !== 'after-end') return;
+    advanceSlide();
+  }, [autoSlide, videoAdvanceMode, advanceSlide]);
 
   // Auto-slide timer. Videos in 'after-end' mode advance via onEnded instead.
   useEffect(() => {
@@ -111,15 +133,11 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     if (isVideo && videoAdvanceMode === 'after-end') return;
 
     const timeout = setTimeout(() => {
-      if (index < assets.length - 1) {
-        goToNext();
-      } else {
-        setAutoSlide(false);
-      }
+      advanceSlide();
     }, slideInterval * 1000);
 
     return () => clearTimeout(timeout);
-  }, [autoSlide, index, isVideo, videoAdvanceMode, slideInterval, assets.length, goToNext]);
+  }, [autoSlide, index, isVideo, videoAdvanceMode, slideInterval, advanceSlide]);
 
   useEffect(() => {
     const handleKeyboard = (e) => {
@@ -313,6 +331,34 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-immich-primary/50 transition-colors"
                 />
                 <span className="text-xs text-white/40 flex-none">seconds</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/70 block">Direction</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'forward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                  <input
+                    type="radio"
+                    name="slideDirection"
+                    checked={slideDirection === 'forward'}
+                    onChange={() => setSlideDirection('forward')}
+                    className="accent-immich-primary"
+                  />
+                  <ArrowRight className="w-3.5 h-3.5 text-white/70" />
+                  <span className="text-xs text-white/80">Forward</span>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'backward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                  <input
+                    type="radio"
+                    name="slideDirection"
+                    checked={slideDirection === 'backward'}
+                    onChange={() => setSlideDirection('backward')}
+                    className="accent-immich-primary"
+                  />
+                  <ArrowLeft className="w-3.5 h-3.5 text-white/70" />
+                  <span className="text-xs text-white/80">Backward</span>
+                </label>
               </div>
             </div>
 
