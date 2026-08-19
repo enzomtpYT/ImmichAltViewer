@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useDeferredValue, lazy, Suspense } from 'react';
 import ImageGallery from './ImageGallery';
-import FullscreenViewer from './FullscreenViewer';
 import DateSlider from './DateSlider';
+import { formatDateKey } from '../utils/dates';
 import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X, Keyboard } from 'lucide-react';
+
+const FullscreenViewer = lazy(() => import('./FullscreenViewer'));
 
 const API_URL = ''; // Relative URL for production
 const ALBUM_COLOR_PALETTE = [
@@ -36,7 +38,13 @@ function ShortcutRow({ keys, action }) {
 }
 
 function AlbumViewer() {
-  const isMobile = window.innerWidth <= 768;
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Safe localStorage access
   const getSafeItem = (key, defaultValue) => {
@@ -131,6 +139,7 @@ function AlbumViewer() {
 
       setAllAssets(data.map((asset) => ({
         ...asset,
+        _dateKey: formatDateKey(asset.createdAt),
         sourceAlbumId: idToUse,
         sourceAlbumName: getAlbumDisplayName(idToUse),
         sourceColor: null,
@@ -185,6 +194,7 @@ function AlbumViewer() {
         const albumId = asset.sourceAlbumId || idsToUse[0];
         return {
           ...asset,
+          _dateKey: formatDateKey(asset.createdAt),
           sourceAlbumId: albumId,
           sourceAlbumName: getAlbumDisplayName(albumId),
           sourceColor: getStableColorForAlbum(albumId),
@@ -250,23 +260,21 @@ function AlbumViewer() {
     return () => document.removeEventListener('keydown', handleGlobalKeys);
   }, []);
 
-  const handleDateSelect = (dateString) => {
-    const targetAssetIndex = allAssets.findIndex((asset) => {
-      const assetDate = new Date(asset.createdAt);
-      const assetDateString = assetDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      return assetDateString === dateString;
+  const dateToIndex = useMemo(() => {
+    const map = new Map();
+    allAssets.forEach((asset, index) => {
+      const key = asset._dateKey || formatDateKey(asset.createdAt);
+      if (key && !map.has(key)) map.set(key, index);
     });
+    return map;
+  }, [allAssets]);
 
-    if (targetAssetIndex === -1) return;
-
-    // Trigger a distinct request each time so repeated clicks on the same date still jump.
-    setJumpToDateRequest({ dateString, requestId: Date.now() });
-  };
+  const handleDateSelect = useCallback((dateString) => {
+    if (dateToIndex.has(dateString)) {
+      // Trigger a distinct request each time so repeated clicks on the same date still jump.
+      setJumpToDateRequest({ dateString, requestId: Date.now() });
+    }
+  }, [dateToIndex]);
 
   const handleKeyPress = (e) => {
     if (e.key !== 'Enter') return;
@@ -328,13 +336,16 @@ function AlbumViewer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaTypeFilter, setMediaTypeFilter] = useState('ALL'); // 'ALL' | 'IMAGE' | 'VIDEO'
 
+  // Defer filtering while the user is typing so the gallery isn't rebuilt per keystroke
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const filteredAssets = useMemo(() => {
     return allAssets.filter((asset) => {
       if (mediaTypeFilter === 'IMAGE' && asset.type !== 'IMAGE') return false;
       if (mediaTypeFilter === 'VIDEO' && asset.type !== 'VIDEO') return false;
 
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
+      if (deferredSearchQuery.trim()) {
+        const query = deferredSearchQuery.toLowerCase().trim();
         const filename = (asset.originalFileName || '').toLowerCase();
         const assetId = asset.assetId.toLowerCase();
         if (!filename.includes(query) && !assetId.includes(query)) return false;
@@ -342,7 +353,7 @@ function AlbumViewer() {
 
       return true;
     });
-  }, [allAssets, mediaTypeFilter, searchQuery]);
+  }, [allAssets, mediaTypeFilter, deferredSearchQuery]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -625,16 +636,18 @@ function AlbumViewer() {
       </main>
 
       {fullscreenAsset && (
-        <FullscreenViewer
-          assets={filteredAssets}
-          currentIndex={fullscreenIndex}
-          apiKey={apiKey}
-          onClose={() => setFullscreenAsset(null)}
-          onNavigate={(newIndex) => {
-            setFullscreenIndex(newIndex);
-            setFullscreenAsset(filteredAssets[newIndex]);
-          }}
-        />
+        <Suspense fallback={null}>
+          <FullscreenViewer
+            assets={filteredAssets}
+            currentIndex={fullscreenIndex}
+            apiKey={apiKey}
+            onClose={() => setFullscreenAsset(null)}
+            onNavigate={(newIndex) => {
+              setFullscreenIndex(newIndex);
+              setFullscreenAsset(filteredAssets[newIndex]);
+            }}
+          />
+        </Suspense>
       )}
       
       {isMobile && allAssets.length > 0 && !fullscreenAsset && (

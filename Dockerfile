@@ -2,7 +2,7 @@
 FROM node:18-alpine as frontend-build
 WORKDIR /app/front-react
 COPY front-react/package*.json ./
-RUN npm install
+RUN npm ci
 COPY front-react/ ./
 RUN npm run build
 

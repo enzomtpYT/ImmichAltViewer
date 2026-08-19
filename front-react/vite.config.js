@@ -13,4 +13,14 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          motion: ["framer-motion"],
+          virtualizer: ["@tanstack/react-virtual"],
+        },
+      },
+    },
+  },
 });

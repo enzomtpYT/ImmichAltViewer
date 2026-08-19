@@ -55,16 +55,16 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     try { localStorage.setItem('immich_slide_direction', slideDirection); } catch { /* ignore */ }
   }, [slideDirection]);
 
-  // Preload nearby images in both directions (skip videos)
+  // Preload nearby images (preview size — the current asset alone uses full size)
   useEffect(() => {
     const preloadImages = [];
-    for (let i = -3; i <= 3; i++) {
+    for (let i = -2; i <= 2; i++) {
       if (i === 0) continue;
 
       const candidateIndex = index + i;
       if (candidateIndex >= 0 && candidateIndex < assets.length && assets[candidateIndex].type !== 'VIDEO') {
         const img = new Image();
-        img.src = `${API_URL}/proxy/fullsize/${assets[candidateIndex].assetId}?api_key=${encodeURIComponent(apiKey)}`;
+        img.src = `${API_URL}/proxy/preview/${assets[candidateIndex].assetId}?api_key=${encodeURIComponent(apiKey)}`;
         preloadImages.push(img);
       }
     }
