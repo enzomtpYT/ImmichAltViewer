@@ -60,6 +60,8 @@ asset_cache = {}  # {cache_key: (timestamp, data)}
 CACHE_TTL = 60  # seconds
 MAX_CACHE_ENTRIES = 500
 
+user_id_cache = {}  # {api_key: (timestamp, user_id)}
+
 def cache_put(key, value):
     """Insert into the cache, bumping LRU order and evicting oldest entries over the cap."""
     now = time.time()
@@ -91,6 +93,33 @@ def resolve_api_key(api_key: str | None, x_api_key: str | None) -> str:
     return (x_api_key or api_key or "").encode('ascii', 'ignore').decode('ascii').strip()
 
 
+async def get_current_user_id(api_key: str) -> str:
+    """Validate API key against Immich and return the authenticated user ID."""
+    now = time.time()
+    if api_key in user_id_cache:
+        cached_time, uid = user_id_cache[api_key]
+        if now - cached_time < 300:  # cache for 5 minutes
+            return uid
+
+    try:
+        resp = await http_client.get(
+            f"{IMMICH_URL}/api/users/me",
+            headers={"x-api-key": api_key},
+            timeout=10.0
+        )
+        if resp.status_code == 200:
+            user_data = resp.json()
+            uid = user_data.get("id")
+            if uid:
+                user_id_cache[api_key] = (now, uid)
+                return uid
+        raise HTTPException(status_code=401, detail="Invalid Immich API key")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to authenticate with Immich server: {e}")
+
+
 async def create_db_pool_with_retry(url, retries=10, delay=3.0):
     """Create the asyncpg pool, retrying with backoff so a momentarily-down DB
     doesn't crash-loop the container at startup."""
@@ -115,6 +144,7 @@ async def lifespan(app):
     db_pool = await create_db_pool_with_retry(DATABASE_URL)
     # Clear cache on reload
     asset_cache.clear()
+    user_id_cache.clear()
     try:
         yield
     finally:
@@ -128,12 +158,14 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/library/assets")
 async def get_library_assets(api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
-    """Fetch all library assets sorted by date uploaded (createdAt DESC) directly from Immich DB"""
+    """Fetch all library assets accessible to the user sorted by upload date (createdAt DESC)"""
     key = resolve_api_key(api_key, x_api_key)
     if not key:
         raise HTTPException(status_code=401, detail="Missing API key")
 
-    cache_key = "library:all"
+    user_id = await get_current_user_id(key)
+
+    cache_key = f"library:{user_id}"
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
@@ -143,9 +175,14 @@ async def get_library_assets(api_key: str = Query(None), x_api_key: str = Header
             '''
             SELECT a."id" AS "assetId", a."createdAt", a."type", a."originalFileName"
             FROM asset a
-            WHERE a."deletedAt" IS NULL
+            WHERE a."deletedAt" IS NULL 
+              AND (
+                a."ownerId" = $1::uuid 
+                OR a."ownerId" IN (SELECT "sharedById" FROM partner WHERE "sharedWithId" = $1::uuid)
+              )
             ORDER BY a."createdAt" DESC
-            '''
+            ''',
+            user_id
         )
 
     result = [{"assetId": str(row["assetId"]), "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
@@ -348,6 +385,7 @@ async def clear_cache():
     """Clears in-memory asset cache"""
     count = len(asset_cache)
     asset_cache.clear()
+    user_id_cache.clear()
     return {"message": "Cache cleared successfully", "clearedEntries": count}
 
 

@@ -119,7 +119,7 @@ function AlbumViewer() {
     setAllAssets([]);
 
     try {
-      const response = await fetch(`${API_URL}/library/assets`, {
+      const response = await fetch(`${API_URL}/library/assets?api_key=${encodeURIComponent(keyToUse.trim())}`, {
         headers: {
           'X-Api-Key': keyToUse.trim(),
         },
