@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useDeferredValue, lazy, Susp
 import ImageGallery from './ImageGallery';
 import DateSlider from './DateSlider';
 import { formatDateKey } from '../utils/dates';
-import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X, Keyboard } from 'lucide-react';
+import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X, Keyboard, Layers, Folder } from 'lucide-react';
 
 const FullscreenViewer = lazy(() => import('./FullscreenViewer'));
 
@@ -56,6 +56,7 @@ function AlbumViewer() {
     }
   };
 
+  const [viewMode, setViewMode] = useState(() => getSafeItem('immich_view_mode', 'albums')); // 'albums' | 'library'
   const [apiKey, setApiKey] = useState(() => getSafeItem('immich_api_key', ''));
   const [albumId, setAlbumId] = useState(() => getSafeItem('immich_album_id', ''));
   const [savedAlbums, setSavedAlbums] = useState(() => {
@@ -96,6 +97,7 @@ function AlbumViewer() {
   // Save to localStorage
   useEffect(() => {
     try {
+      if (viewMode) localStorage.setItem('immich_view_mode', viewMode);
       if (apiKey) localStorage.setItem('immich_api_key', apiKey);
       if (albumId) localStorage.setItem('immich_album_id', albumId);
       localStorage.setItem('immich_saved_albums', JSON.stringify(savedAlbums));
@@ -103,7 +105,55 @@ function AlbumViewer() {
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
-  }, [apiKey, albumId, savedAlbums, selectedAlbumIds]);
+  }, [viewMode, apiKey, albumId, savedAlbums, selectedAlbumIds]);
+
+  const loadLibrary = useCallback(async (providedKey) => {
+    const keyToUse = providedKey || apiKey;
+    if (!keyToUse?.trim()) {
+      setError('Please enter your Immich API key');
+      return;
+    }
+
+    setError('');
+    setInitialLoading(true);
+    setAllAssets([]);
+
+    try {
+      const response = await fetch(`${API_URL}/library/assets`, {
+        headers: {
+          'X-Api-Key': keyToUse.trim(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Server returned invalid data format');
+      }
+
+      setAllAssets(data.map((asset) => ({
+        ...asset,
+        _dateKey: formatDateKey(asset.createdAt),
+        sourceAlbumId: 'library',
+        sourceAlbumName: 'Full Library',
+        sourceColor: null,
+      })));
+
+      if (data.length === 0) {
+        setError('No assets found in your Immich library');
+      }
+      setShowConfig(false);
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+      console.error('Failed to load library:', err);
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [apiKey]);
 
   const loadAlbum = useCallback(async (providedKey, providedId) => {
     const keyToUse = providedKey || apiKey;
@@ -214,9 +264,10 @@ function AlbumViewer() {
     }
   }, [apiKey, selectedAlbumIds, loadAlbum, getAlbumDisplayName]);
 
-  // Auto-load album if credentials are saved
+  // Auto-load album or library if credentials are saved
   useEffect(() => {
     const savedApiKey = getSafeItem('immich_api_key', '');
+    const savedViewMode = getSafeItem('immich_view_mode', 'albums');
     const savedAlbumId = getSafeItem('immich_album_id', '');
     const savedSelectedAlbumIds = getSafeItem('immich_selected_album_ids', '[]');
     let parsedSelectedAlbumIds = [];
@@ -229,7 +280,9 @@ function AlbumViewer() {
     }
     
     if (savedApiKey && allAssets.length === 0 && !initialLoading) {
-      if (parsedSelectedAlbumIds.length > 0) {
+      if (savedViewMode === 'library') {
+        loadLibrary(savedApiKey);
+      } else if (parsedSelectedAlbumIds.length > 0) {
         if (parsedSelectedAlbumIds.length === 1) {
           loadAlbum(savedApiKey, parsedSelectedAlbumIds[0]);
         } else {
@@ -239,7 +292,7 @@ function AlbumViewer() {
         loadAlbum(savedApiKey, savedAlbumId);
       }
     }
-  }, [loadAlbum, loadSelectedAlbums, allAssets.length, initialLoading]);
+  }, [loadAlbum, loadSelectedAlbums, loadLibrary, allAssets.length, initialLoading]);
 
   // Global shortcut to toggle the keyboard shortcuts dialog
   useEffect(() => {
@@ -271,13 +324,17 @@ function AlbumViewer() {
 
   const handleDateSelect = useCallback((dateString) => {
     if (dateToIndex.has(dateString)) {
-      // Trigger a distinct request each time so repeated clicks on the same date still jump.
       setJumpToDateRequest({ dateString, requestId: Date.now() });
     }
   }, [dateToIndex]);
 
   const handleKeyDown = (e) => {
     if (e.key !== 'Enter') return;
+
+    if (viewMode === 'library') {
+      loadLibrary();
+      return;
+    }
 
     if (selectedAlbumIds.length > 1) {
       loadSelectedAlbums();
@@ -336,7 +393,6 @@ function AlbumViewer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaTypeFilter, setMediaTypeFilter] = useState('ALL'); // 'ALL' | 'IMAGE' | 'VIDEO'
 
-  // Defer filtering while the user is typing so the gallery isn't rebuilt per keystroke
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const filteredAssets = useMemo(() => {
@@ -363,7 +419,14 @@ function AlbumViewer() {
             <ImageIcon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white/90">Immich Viewer</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-white/90">Immich Viewer</h1>
+              {viewMode === 'library' && allAssets.length > 0 && (
+                <span className="text-[10px] bg-immich-primary/20 text-immich-primary font-semibold px-2 py-0.5 rounded-full border border-immich-primary/30 inline-flex items-center gap-1">
+                  <Layers className="w-3 h-3" /> Full Library
+                </span>
+              )}
+            </div>
             {allAssets.length > 0 && (
               <div className="flex flex-col">
                 <p className="text-xs text-white/40 font-medium">
@@ -437,137 +500,188 @@ function AlbumViewer() {
 
       {showConfig && (
         <div className="flex-none p-6 bg-immich-glass backdrop-blur-xl border-b border-white/10 animate-fade-in space-y-6">
-          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">API Key</label>
-              <input
-                type="password"
-                placeholder="Paste key here"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
-              />
+          {/* Mode Switcher */}
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+            <div>
+              <p className="text-sm font-bold text-white/90">Browse Mode</p>
+              <p className="text-xs text-white/40">Select whether to view your entire Immich library or specific albums</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Album UUID</label>
-              <input
-                type="text"
-                placeholder="Enter ID"
-                value={albumId}
-                onChange={(e) => setAlbumId(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => {
-                  if (selectedAlbumIds.length === 1) {
-                    loadAlbum(undefined, selectedAlbumIds[0]);
-                  } else {
-                    loadSelectedAlbums();
-                  }
-                }} 
-                disabled={initialLoading || !apiKey || selectedAlbumIds.length === 0} 
-                className="flex-1 bg-immich-primary hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-immich-primary text-white text-sm font-semibold rounded-lg px-6 py-2 transition-all shadow-lg shadow-immich-primary/20"
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-lg p-1 text-xs self-start sm:self-auto">
+              <button
+                onClick={() => setViewMode('library')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${viewMode === 'library' ? 'bg-immich-primary text-white shadow' : 'text-white/60 hover:text-white'}`}
               >
-                {initialLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : selectedAlbumIds.length === 1 ? 'Load Album' : `Load Selected (${selectedAlbumIds.length})`}
+                <Layers className="w-3.5 h-3.5" />
+                Full Library
+              </button>
+              <button
+                onClick={() => setViewMode('albums')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${viewMode === 'albums' ? 'bg-immich-primary text-white shadow' : 'text-white/60 hover:text-white'}`}
+              >
+                <Folder className="w-3.5 h-3.5" />
+                Albums & Bookmarks
               </button>
             </div>
           </div>
 
-          <div className="max-w-4xl mx-auto border-t border-white/5 pt-6 space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Bookmark className="w-4 h-4 text-immich-primary" />
-                  <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Save Bookmark</p>
-                </div>
+          {viewMode === 'library' ? (
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Immich API Key</label>
                 <input
-                  type="text"
-                  placeholder="Bookmark name (optional)"
-                  value={albumName}
-                  onChange={(e) => setAlbumName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentAlbum()}
+                  type="password"
+                  placeholder="Paste your Immich API key here"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors text-white"
                 />
-                <button
-                  onClick={saveCurrentAlbum}
-                  disabled={!albumId}
-                  className="w-full inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-                  title="Save current UUID as bookmark"
+              </div>
+              <div>
+                <button 
+                  onClick={() => loadLibrary()} 
+                  disabled={initialLoading || !apiKey} 
+                  className="w-full bg-immich-primary hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-immich-primary text-white text-sm font-semibold rounded-lg px-6 py-2 transition-all shadow-lg shadow-immich-primary/20"
                 >
-                  <Bookmark className="w-4 h-4" />
-                  Save Current Album
+                  {initialLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Load Full Library'}
                 </button>
               </div>
             </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Saved Bookmarks</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-white/40">{selectedAlbumIds.length} selected</span>
-                  <button
-                    onClick={selectAllAlbums}
-                    disabled={savedAlbums.length === 0 || selectedAlbumIds.length === savedAlbums.length}
-                    className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-xs font-medium rounded-md px-2 py-1 transition-colors"
+          ) : (
+            <>
+              <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">API Key</label>
+                  <input
+                    type="password"
+                    placeholder="Paste key here"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">Album UUID</label>
+                  <input
+                    type="text"
+                    placeholder="Enter ID"
+                    value={albumId}
+                    onChange={(e) => setAlbumId(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      if (selectedAlbumIds.length === 1) {
+                        loadAlbum(undefined, selectedAlbumIds[0]);
+                      } else {
+                        loadSelectedAlbums();
+                      }
+                    }} 
+                    disabled={initialLoading || !apiKey || selectedAlbumIds.length === 0} 
+                    className="flex-1 bg-immich-primary hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-immich-primary text-white text-sm font-semibold rounded-lg px-6 py-2 transition-all shadow-lg shadow-immich-primary/20"
                   >
-                    Select All
-                  </button>
-                  <button
-                    onClick={() => setSelectedAlbumIds([])}
-                    disabled={selectedAlbumIds.length === 0}
-                    className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-xs font-medium rounded-md px-2 py-1 transition-colors"
-                  >
-                    Clear
+                    {initialLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : selectedAlbumIds.length === 1 ? 'Load Album' : `Load Selected (${selectedAlbumIds.length})`}
                   </button>
                 </div>
               </div>
-              <p className="text-[11px] text-white/35 mb-3">Click a bookmark card to include/exclude it from the next load.</p>
-              {savedAlbums.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {savedAlbums.map((saved) => (
-                    <div
-                      key={saved.id}
-                      className={`group flex items-center justify-between rounded-lg border px-3 py-2 transition-all ${
-                        selectedAlbumIds.includes(saved.id)
-                          ? 'bg-immich-primary/20 border-immich-primary/60'
-                          : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06]'
-                      }`}
+
+              <div className="max-w-4xl mx-auto border-t border-white/5 pt-6 space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Bookmark className="w-4 h-4 text-immich-primary" />
+                      <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Save Bookmark</p>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Bookmark name (optional)"
+                      value={albumName}
+                      onChange={(e) => setAlbumName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && saveCurrentAlbum()}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors text-white"
+                    />
+                    <button
+                      onClick={saveCurrentAlbum}
+                      disabled={!albumId}
+                      className="w-full inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+                      title="Save current UUID as bookmark"
                     >
+                      <Bookmark className="w-4 h-4" />
+                      Save Current Album
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Saved Bookmarks</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-white/40">{selectedAlbumIds.length} selected</span>
                       <button
-                        onClick={() => toggleAlbumSelection(saved.id)}
-                        className="flex-1 min-w-0 text-left flex items-start gap-2"
+                        onClick={selectAllAlbums}
+                        disabled={savedAlbums.length === 0 || selectedAlbumIds.length === savedAlbums.length}
+                        className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-xs font-medium rounded-md px-2 py-1 transition-colors"
                       >
-                        <span className={`mt-0.5 inline-flex h-4 w-4 flex-none items-center justify-center rounded border text-[10px] ${selectedAlbumIds.includes(saved.id) ? 'border-immich-primary bg-immich-primary text-white' : 'border-white/25 text-transparent'}`}>✓</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <div 
-                              className="w-2.5 h-2.5 rounded-full flex-none shadow-sm ring-1 ring-white/20" 
-                              style={{ backgroundColor: getStableColorForAlbum(saved.id) }}
-                            />
-                            <p className="text-sm font-medium text-white truncate leading-tight">{saved.name}</p>
-                          </div>
-                          <p className="text-[11px] text-white/35 truncate pl-3.5 leading-tight">{saved.id}</p>
-                        </div>
+                        Select All
                       </button>
                       <button
-                        onClick={() => removeSavedAlbum(saved.id)}
-                        className="p-1.5 rounded hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-colors flex-none ml-2"
-                        title="Delete bookmark"
+                        onClick={() => setSelectedAlbumIds([])}
+                        disabled={selectedAlbumIds.length === 0}
+                        className="inline-flex items-center justify-center bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 text-white/80 text-xs font-medium rounded-md px-2 py-1 transition-colors"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear
                       </button>
                     </div>
-                  ))}
+                  </div>
+                  <p className="text-[11px] text-white/35 mb-3">Click a bookmark card to include/exclude it from the next load.</p>
+                  {savedAlbums.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {savedAlbums.map((saved) => (
+                        <div
+                          key={saved.id}
+                          className={`group flex items-center justify-between rounded-lg border px-3 py-2 transition-all ${
+                            selectedAlbumIds.includes(saved.id)
+                              ? 'bg-immich-primary/20 border-immich-primary/60'
+                              : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06]'
+                          }`}
+                        >
+                          <button
+                            onClick={() => toggleAlbumSelection(saved.id)}
+                            className="flex-1 min-w-0 text-left flex items-start gap-2"
+                          >
+                            <span className={`mt-0.5 inline-flex h-4 w-4 flex-none items-center justify-center rounded border text-[10px] ${selectedAlbumIds.includes(saved.id) ? 'border-immich-primary bg-immich-primary text-white' : 'border-white/25 text-transparent'}`}>✓</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div 
+                                  className="w-2.5 h-2.5 rounded-full flex-none shadow-sm ring-1 ring-white/20" 
+                                  style={{ backgroundColor: getStableColorForAlbum(saved.id) }}
+                                />
+                                <p className="text-sm font-medium text-white truncate leading-tight">{saved.name}</p>
+                              </div>
+                              <p className="text-[11px] text-white/35 truncate pl-3.5 leading-tight">{saved.id}</p>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => removeSavedAlbum(saved.id)}
+                            className="p-1.5 rounded hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-colors flex-none ml-2"
+                            title="Delete bookmark"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/20 italic py-2">No bookmarks yet. Save your current album to switch faster later.</p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-white/20 italic py-2">No bookmarks yet. Save your current album to switch faster later.</p>
-              )}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
 
           {error && (
             <div className="max-w-4xl mx-auto mt-4 text-xs text-red-400 bg-red-400/10 p-2 rounded border border-red-400/20 animate-fade-in">
@@ -718,10 +832,12 @@ function AlbumViewer() {
                 <ShortcutRow keys="?" action="Show / hide this shortcuts list" />
               </section>
               <section className="space-y-2">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Fullscreen Viewer</h3>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Fullscreen Viewer & Slideshow</h3>
                 <ShortcutRow keys="Esc" action="Close / leave fullscreen" />
                 <ShortcutRow keys="←  →" action="Previous / next asset" />
                 <ShortcutRow keys="Space" action="Start / pause slideshow" />
+                <ShortcutRow keys="S" action="Toggle random shuffle mode" />
+                <ShortcutRow keys="M" action="Mute / unmute video audio" />
                 <ShortcutRow keys="↓" action="Download asset" />
                 <ShortcutRow keys="I" action="Toggle asset info panel" />
               </section>
@@ -734,4 +850,3 @@ function AlbumViewer() {
 }
 
 export default AlbumViewer;
-

@@ -11,6 +11,9 @@ import os
 from dotenv import load_dotenv
 import mimetypes
 from uuid import UUID
+import time
+import asyncio
+from contextlib import asynccontextmanager
 
 # Fix MIME types for Windows
 mimetypes.add_type('application/javascript', '.js')
@@ -53,9 +56,6 @@ http_client = None
 db_pool = None
 
 # Simple in-memory cache with TTL and LRU eviction
-import time
-import asyncio
-from contextlib import asynccontextmanager
 asset_cache = {}  # {cache_key: (timestamp, data)}
 CACHE_TTL = 60  # seconds
 MAX_CACHE_ENTRIES = 500
@@ -83,6 +83,12 @@ def cache_get(key):
     del asset_cache[key]
     asset_cache[key] = entry
     return data
+
+
+def resolve_api_key(api_key: str | None, x_api_key: str | None) -> str:
+    """Prefer the X-Api-Key header; fall back to the legacy query param.
+    Sanitize to ASCII to avoid encoding issues in HTTP headers."""
+    return (x_api_key or api_key or "").encode('ascii', 'ignore').decode('ascii').strip()
 
 
 async def create_db_pool_with_retry(url, retries=10, delay=3.0):
@@ -118,6 +124,34 @@ async def lifespan(app):
             await db_pool.close()
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/library/assets")
+async def get_library_assets(api_key: str = Query(None), x_api_key: str = Header(None, alias="X-Api-Key")):
+    """Fetch all library assets sorted by date uploaded (createdAt DESC) directly from Immich DB"""
+    key = resolve_api_key(api_key, x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    cache_key = "library:all"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            '''
+            SELECT a."id" AS "assetId", a."createdAt", a."type", a."originalFileName"
+            FROM asset a
+            WHERE a."deletedAt" IS NULL
+            ORDER BY a."createdAt" DESC
+            '''
+        )
+
+    result = [{"assetId": str(row["assetId"]), "createdAt": row["createdAt"], "type": row["type"], "originalFileName": row["originalFileName"]} for row in rows]
+    cache_put(cache_key, result)
+    return result
+
 
 @app.get("/albums/{album_id}/assets")
 async def get_album_assets(album_id: str):
@@ -315,13 +349,6 @@ async def clear_cache():
     count = len(asset_cache)
     asset_cache.clear()
     return {"message": "Cache cleared successfully", "clearedEntries": count}
-
-
-
-def resolve_api_key(api_key: str | None, x_api_key: str | None) -> str:
-    """Prefer the X-Api-Key header; fall back to the legacy query param.
-    Sanitize to ASCII to avoid encoding issues in HTTP headers."""
-    return (x_api_key or api_key or "").encode('ascii', 'ignore').decode('ascii').strip()
 
 
 async def stream_immich_bytes(response):

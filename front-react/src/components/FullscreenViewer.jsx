@@ -1,8 +1,24 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal, ArrowLeft, ArrowRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal, ArrowLeft, ArrowRight, Shuffle, Volume2, VolumeX } from 'lucide-react';
 
 const API_URL = ''; // Relative URL for production
+
+function generateShuffleDeck(length, startingIndex = 0) {
+  if (length <= 1) return [0];
+  const indices = Array.from({ length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  if (startingIndex >= 0 && startingIndex < length) {
+    const pos = indices.indexOf(startingIndex);
+    if (pos > -1) {
+      [indices[0], indices[pos]] = [indices[pos], indices[0]];
+    }
+  }
+  return indices;
+}
 
 function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate }) {
   const [index, setIndex] = useState(currentIndex);
@@ -43,6 +59,27 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     }
   });
 
+  const [isShuffle, setIsShuffle] = useState(() => {
+    try {
+      return localStorage.getItem('immich_slideshow_shuffle') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [isVideoMuted, setIsVideoMuted] = useState(() => {
+    try {
+      return localStorage.getItem('immich_video_muted') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const [shuffleDeck, setShuffleDeck] = useState(() => {
+    return generateShuffleDeck(assets.length, currentIndex);
+  });
+  const [deckPointer, setDeckPointer] = useState(0);
+
   useEffect(() => {
     try { localStorage.setItem('immich_slide_interval', String(slideInterval)); } catch { /* ignore */ }
   }, [slideInterval]);
@@ -55,41 +92,97 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     try { localStorage.setItem('immich_slide_direction', slideDirection); } catch { /* ignore */ }
   }, [slideDirection]);
 
+  useEffect(() => {
+    try { localStorage.setItem('immich_slideshow_shuffle', String(isShuffle)); } catch { /* ignore */ }
+  }, [isShuffle]);
+
+  useEffect(() => {
+    try { localStorage.setItem('immich_video_muted', String(isVideoMuted)); } catch { /* ignore */ }
+  }, [isVideoMuted]);
+
+  const toggleShuffle = useCallback(() => {
+    setIsShuffle(prev => {
+      const nextVal = !prev;
+      if (nextVal) {
+        const newDeck = generateShuffleDeck(assets.length, index);
+        setShuffleDeck(newDeck);
+        setDeckPointer(0);
+      }
+      return nextVal;
+    });
+  }, [assets.length, index]);
+
   // Preload nearby images (preview size — the current asset alone uses full size)
   useEffect(() => {
     const preloadImages = [];
-    for (let i = -2; i <= 2; i++) {
-      if (i === 0) continue;
+    const candidateIndices = [];
 
-      const candidateIndex = index + i;
-      if (candidateIndex >= 0 && candidateIndex < assets.length && assets[candidateIndex].type !== 'VIDEO') {
-        const img = new Image();
-        img.src = `${API_URL}/proxy/preview/${assets[candidateIndex].assetId}?api_key=${encodeURIComponent(apiKey)}`;
-        preloadImages.push(img);
+    if (isShuffle) {
+      if (deckPointer + 1 < shuffleDeck.length) candidateIndices.push(shuffleDeck[deckPointer + 1]);
+      if (deckPointer + 2 < shuffleDeck.length) candidateIndices.push(shuffleDeck[deckPointer + 2]);
+    } else {
+      for (let i = -2; i <= 2; i++) {
+        if (i === 0) continue;
+        const candidateIndex = index + i;
+        if (candidateIndex >= 0 && candidateIndex < assets.length) {
+          candidateIndices.push(candidateIndex);
+        }
       }
     }
+
+    candidateIndices.forEach((cIdx) => {
+      if (assets[cIdx] && assets[cIdx].type !== 'VIDEO') {
+        const img = new Image();
+        img.src = `${API_URL}/proxy/preview/${assets[cIdx].assetId}?api_key=${encodeURIComponent(apiKey)}`;
+        preloadImages.push(img);
+      }
+    });
+
     return () => preloadImages.forEach(img => (img.src = ''));
-  }, [index, assets, apiKey]);
+  }, [isShuffle, deckPointer, shuffleDeck, index, assets, apiKey]);
 
   const fullsizeUrl = isVideo
     ? `${API_URL}/proxy/video/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`
     : `${API_URL}/proxy/fullsize/${asset.assetId}?api_key=${encodeURIComponent(apiKey)}`;
 
   const goToPrevious = useCallback(() => {
-    if (index > 0) {
+    if (isShuffle) {
+      if (deckPointer > 0) {
+        const nextPointer = deckPointer - 1;
+        setDeckPointer(nextPointer);
+        const newIdx = shuffleDeck[nextPointer];
+        setIndex(newIdx);
+        onNavigate(newIdx);
+      }
+    } else if (index > 0) {
       const newIndex = index - 1;
       setIndex(newIndex);
       onNavigate(newIndex);
     }
-  }, [index, onNavigate]);
+  }, [isShuffle, deckPointer, shuffleDeck, index, onNavigate]);
 
   const goToNext = useCallback(() => {
-    if (index < assets.length - 1) {
+    if (isShuffle) {
+      if (deckPointer < shuffleDeck.length - 1) {
+        const nextPointer = deckPointer + 1;
+        setDeckPointer(nextPointer);
+        const newIdx = shuffleDeck[nextPointer];
+        setIndex(newIdx);
+        onNavigate(newIdx);
+      } else if (assets.length > 1) {
+        const newDeck = generateShuffleDeck(assets.length);
+        setShuffleDeck(newDeck);
+        setDeckPointer(0);
+        const newIdx = newDeck[0];
+        setIndex(newIdx);
+        onNavigate(newIdx);
+      }
+    } else if (index < assets.length - 1) {
       const newIndex = index + 1;
       setIndex(newIndex);
       onNavigate(newIndex);
     }
-  }, [index, assets.length, onNavigate]);
+  }, [isShuffle, deckPointer, shuffleDeck, assets.length, index, onNavigate]);
 
   const handleDownload = useCallback(() => {
     const defaultExt = isVideo ? 'mp4' : 'jpg';
@@ -109,7 +202,9 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   }, []);
 
   const advanceSlide = useCallback(() => {
-    if (slideDirection === 'backward') {
+    if (isShuffle) {
+      goToNext();
+    } else if (slideDirection === 'backward') {
       if (index > 0) {
         goToPrevious();
       } else {
@@ -120,7 +215,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     } else {
       setAutoSlide(false);
     }
-  }, [slideDirection, index, assets.length, goToPrevious, goToNext]);
+  }, [isShuffle, slideDirection, index, assets.length, goToPrevious, goToNext]);
 
   const handleVideoEnded = useCallback(() => {
     if (!autoSlide || videoAdvanceMode !== 'after-end') return;
@@ -141,14 +236,19 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
 
   useEffect(() => {
     const handleKeyboard = (e) => {
+      const target = e.target;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isInput) return;
+
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowLeft') goToPrevious();
       else if (e.key === 'ArrowRight') goToNext();
       else if (e.key === 'ArrowDown') handleDownload();
-      else if (e.key === 'i') setShowInfo(prev => !prev);
+      else if (e.key === 'i' || e.key === 'I') setShowInfo(prev => !prev);
+      else if (e.key === 's' || e.key === 'S') toggleShuffle();
+      else if (e.key === 'm' || e.key === 'M') setIsVideoMuted(prev => !prev);
       else if (e.key === ' ') {
-        const target = e.target;
-        if (target && (target.tagName === 'VIDEO' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+        if (target && target.tagName === 'VIDEO') return;
         e.preventDefault();
         toggleAutoSlide();
       }
@@ -160,12 +260,11 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       document.removeEventListener('keydown', handleKeyboard);
       document.body.style.overflow = 'auto';
     };
-  }, [onClose, goToPrevious, goToNext, handleDownload, toggleAutoSlide]);
+  }, [onClose, goToPrevious, goToNext, handleDownload, toggleAutoSlide, toggleShuffle]);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length !== 1) return;
 
-    // Allow native interactions for buttons.
     const target = e.target;
     if (target?.closest?.('button')) {
       touchStartRef.current = null;
@@ -195,10 +294,8 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     const sx = dx / dt;
     const sy = dy / dt;
 
-    // Ignore taps and tiny drags.
     if (absX < 40 && absY < 40) return;
 
-    // Dominant axis dispatch keeps gestures predictable.
     if (absX > absY) {
       if (dx > 90 || sx > 0.65) {
         goToPrevious();
@@ -216,6 +313,8 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
   }, [goToPrevious, goToNext, handleDownload, onClose]);
 
   const date = new Date(asset.createdAt);
+  const canGoPrevious = isShuffle ? deckPointer > 0 : index > 0;
+  const canGoNext = isShuffle ? assets.length > 1 : index < assets.length - 1;
 
   return (
     <Motion.div 
@@ -228,11 +327,34 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       <div className="absolute top-0 left-0 right-0 z-[60] flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-auto">
         <div className="flex items-center gap-3">
           <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
-            <span className="text-xs font-bold text-white/80">{index + 1} / {assets.length}</span>
+            <span className="text-xs font-bold text-white/80">
+              {isShuffle ? `🎲 ${deckPointer + 1} / ${assets.length}` : `${index + 1} / ${assets.length}`}
+            </span>
+            {isShuffle && (
+              <span className="text-[10px] bg-immich-primary/30 text-immich-primary px-1.5 py-0.5 rounded font-mono font-semibold uppercase">
+                Shuffle
+              </span>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          <button 
+            onClick={toggleShuffle}
+            title={isShuffle ? 'Disable random shuffle (S)' : 'Enable random shuffle (S)'}
+            className={`p-2 rounded-full transition-colors ${isShuffle ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+          >
+            <Shuffle className="w-5 h-5" />
+          </button>
+          {isVideo && (
+            <button 
+              onClick={() => setIsVideoMuted(prev => !prev)}
+              title={isVideoMuted ? 'Unmute video audio (M)' : 'Mute video audio (M)'}
+              className={`p-2 rounded-full transition-colors ${!isVideoMuted ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+            >
+              {isVideoMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+          )}
           <button 
             onClick={toggleAutoSlide}
             title={autoSlide ? 'Pause slideshow (Space)' : 'Start slideshow (Space)'}
@@ -305,6 +427,21 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               </button>
             </label>
 
+            <label className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Shuffle className="w-3.5 h-3.5 text-white/60" />
+                <span className="text-xs font-semibold text-white/70">Random Shuffle</span>
+              </div>
+              <button
+                role="switch"
+                aria-checked={isShuffle}
+                onClick={toggleShuffle}
+                className={`relative h-6 w-11 rounded-full transition-colors flex-none ${isShuffle ? 'bg-immich-primary' : 'bg-white/15'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isShuffle ? 'translate-x-5' : ''}`} />
+              </button>
+            </label>
+
             <div className="space-y-2">
               <label className="text-xs font-semibold text-white/70 block">Slide interval</label>
               <div className="flex flex-wrap gap-1.5">
@@ -334,37 +471,53 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/70 block">Direction</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'forward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
-                  <input
-                    type="radio"
-                    name="slideDirection"
-                    checked={slideDirection === 'forward'}
-                    onChange={() => setSlideDirection('forward')}
-                    className="accent-immich-primary"
-                  />
-                  <ArrowRight className="w-3.5 h-3.5 text-white/70" />
-                  <span className="text-xs text-white/80">Forward</span>
-                </label>
-                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'backward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
-                  <input
-                    type="radio"
-                    name="slideDirection"
-                    checked={slideDirection === 'backward'}
-                    onChange={() => setSlideDirection('backward')}
-                    className="accent-immich-primary"
-                  />
-                  <ArrowLeft className="w-3.5 h-3.5 text-white/70" />
-                  <span className="text-xs text-white/80">Backward</span>
-                </label>
+            {!isShuffle && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-white/70 block">Direction</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'forward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                    <input
+                      type="radio"
+                      name="slideDirection"
+                      checked={slideDirection === 'forward'}
+                      onChange={() => setSlideDirection('forward')}
+                      className="accent-immich-primary"
+                    />
+                    <ArrowRight className="w-3.5 h-3.5 text-white/70" />
+                    <span className="text-xs text-white/80">Forward</span>
+                  </label>
+                  <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${slideDirection === 'backward' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                    <input
+                      type="radio"
+                      name="slideDirection"
+                      checked={slideDirection === 'backward'}
+                      onChange={() => setSlideDirection('backward')}
+                      className="accent-immich-primary"
+                    />
+                    <ArrowLeft className="w-3.5 h-3.5 text-white/70" />
+                    <span className="text-xs text-white/80">Backward</span>
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-white/70 block">Videos</label>
               <div className="space-y-1.5">
+                <label className="flex items-center justify-between gap-3 p-2 rounded-lg border border-white/10 bg-white/[0.03]">
+                  <div className="flex items-center gap-2">
+                    {isVideoMuted ? <VolumeX className="w-3.5 h-3.5 text-white/60" /> : <Volume2 className="w-3.5 h-3.5 text-white/60" />}
+                    <span className="text-xs text-white/80">Mute Audio</span>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={isVideoMuted}
+                    onClick={() => setIsVideoMuted(prev => !prev)}
+                    className={`relative h-5 w-9 rounded-full transition-colors flex-none ${isVideoMuted ? 'bg-immich-primary' : 'bg-white/15'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isVideoMuted ? 'translate-x-4' : ''}`} />
+                  </button>
+                </label>
                 <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${videoAdvanceMode === 'after-end' ? 'border-immich-primary bg-immich-primary/15' : 'border-white/10 bg-white/[0.03]'}`}>
                   <input
                     type="radio"
@@ -397,7 +550,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {index > 0 && (
+        {canGoPrevious && (
           <button 
             onClick={goToPrevious}
             className="absolute left-4 z-40 p-4 bg-black/20 hover:bg-black/40 text-white/40 hover:text-white rounded-full backdrop-blur-md transition-all hidden md:block"
@@ -406,7 +559,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
           </button>
         )}
         
-        {index < assets.length - 1 && (
+        {canGoNext && (
           <button 
             onClick={goToNext}
             className="absolute right-4 z-40 p-4 bg-black/20 hover:bg-black/40 text-white/40 hover:text-white rounded-full backdrop-blur-md transition-all hidden md:block"
@@ -426,6 +579,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               className="max-w-full max-h-full rounded-lg shadow-2xl"
               controls
               autoPlay
+              muted={isVideoMuted}
               playsInline
               onEnded={handleVideoEnded}
             />

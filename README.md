@@ -13,21 +13,29 @@ Repository: [ImmichAltViewer](https://github.com/enzomtpYT/ImmichAltViewer)
 ## ✨ Features
 
 *   **📅 Sort by Date Uploaded**: The missing view from the official Immich web UI. See recently added photos first, regardless of when they were taken.
+*   **📚 Full Library Browsing**: Browse your entire Immich library sorted strictly by upload date without needing to select or know any album UUIDs.
 *   **🔖 Multi-Album Bookmarks**: Save multiple album UUIDs with custom names. Toggle individual albums or select all to view a unified multi-album timeline with color-coded badges.
+*   **🎲 Non-Repeating Random Shuffle**:
+    *   Fisher-Yates shuffle engine ensuring every photo plays once before reshuffling.
+    *   Full backward/forward history memory so you can return to previously viewed random photos.
+    *   One-click shuffle toggle button + `S` keyboard shortcut.
 *   **🔍 Search & Filters**: Instant filename and asset ID filtering with quick toggles for All, Photos, or Videos.
 *   **🚀 High Performance**: 
     *   Virtual scrolling via `@tanstack/react-virtual` handling thousands of assets smoothly.
-    *   In-memory LRU cache with TTL for album asset queries.
+    *   In-memory LRU cache with TTL for album and full library queries.
     *   Chunked proxy streaming for thumbnails, previews, original full-size photos, and videos with HTTP byte-range seek support.
 *   **🎨 Premium UI**: Dark mode glassmorphism aesthetics, responsive multi-column masonry grid, and smooth animations.
 *   **⏱️ Timeline Scrubber**: Interactive virtualized date timeline rail (desktop side panel and mobile slide-up sheet) to jump directly to any date.
 *   **🎬 Fullscreen Slideshow**:
     *   Configurable intervals (3s, 5s, 10s, 15s, 30s, or custom duration).
-    *   Forward or backward playback directions.
+    *   Forward, backward, and random shuffle playback modes.
     *   Video advance options (advance immediately after video ends or follow the timer).
+    *   Ambient video audio controls (muted by default with `M` toggle shortcut).
 *   **⌨️ Keyboard Shortcuts & Touch Gestures**:
     *   `?` toggle shortcut help dialog.
     *   `Space` start / pause slideshow.
+    *   `S` toggle random shuffle mode.
+    *   `M` toggle video audio mute/unmute.
     *   `←` / `→` navigate assets.
     *   `↓` download current asset.
     *   `i` toggle EXIF and file details panel.
