@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useDeferredValue, lazy, Susp
 import ImageGallery from './ImageGallery';
 import DateSlider from './DateSlider';
 import { formatDateKey } from '../utils/dates';
+import { enterBrowserFullscreen } from '../utils/screen';
 import { Settings, Image as ImageIcon, Loader2, Bookmark, Trash2, Calendar, X, Keyboard, Layers, Folder } from 'lucide-react';
 
 const FullscreenViewer = lazy(() => import('./FullscreenViewer'));
@@ -707,6 +708,11 @@ function AlbumViewer() {
                 apiKey={apiKey}
                 jumpToDateRequest={jumpToDateRequest}
                 onFullscreen={(asset, index) => {
+                  const autoFsSetting = localStorage.getItem('immich_auto_browser_fullscreen');
+                  const shouldAutoFs = autoFsSetting === null ? isMobile : autoFsSetting === 'true';
+                  if (shouldAutoFs) {
+                    enterBrowserFullscreen().catch(() => {});
+                  }
                   setFullscreenIndex(index);
                   setFullscreenAsset(asset);
                 }}
@@ -838,6 +844,7 @@ function AlbumViewer() {
                 <ShortcutRow keys="Space" action="Start / pause slideshow" />
                 <ShortcutRow keys="S" action="Toggle random shuffle mode" />
                 <ShortcutRow keys="M" action="Mute / unmute video audio" />
+                <ShortcutRow keys="F" action="Toggle native browser fullscreen" />
                 <ShortcutRow keys="↓" action="Download asset" />
                 <ShortcutRow keys="I" action="Toggle asset info panel" />
               </section>

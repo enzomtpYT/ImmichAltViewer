@@ -1,6 +1,33 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Calendar, Info, Play, Pause, Maximize2, Download, SlidersHorizontal, ArrowLeft, ArrowRight, Shuffle, Volume2, VolumeX } from 'lucide-react';
+import { 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  Calendar, 
+  Info, 
+  Play, 
+  Pause, 
+  Maximize2, 
+  Minimize2, 
+  Download, 
+  SlidersHorizontal, 
+  ArrowLeft, 
+  ArrowRight, 
+  Shuffle, 
+  Volume2, 
+  VolumeX, 
+  Sun, 
+  Smartphone 
+} from 'lucide-react';
+import { 
+  isMobileDevice, 
+  isBrowserFullscreen, 
+  enterBrowserFullscreen, 
+  exitBrowserFullscreen, 
+  toggleBrowserFullscreen, 
+  useScreenWakeLock 
+} from '../utils/screen';
 
 const API_URL = ''; // Relative URL for production
 
@@ -75,6 +102,29 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     }
   });
 
+  const [autoBrowserFullscreen, setAutoBrowserFullscreen] = useState(() => {
+    try {
+      const stored = localStorage.getItem('immich_auto_browser_fullscreen');
+      return stored === null ? isMobileDevice() : stored === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const [keepScreenAwake, setKeepScreenAwake] = useState(() => {
+    try {
+      const stored = localStorage.getItem('immich_keep_screen_awake');
+      return stored === null ? true : stored === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(() => isBrowserFullscreen());
+
+  // Screen Wake Lock (keeps display active while viewing photos/slideshow)
+  const { isSupported: isWakeLockSupported, isActive: isWakeLockActive } = useScreenWakeLock(keepScreenAwake);
+
   const [shuffleDeck, setShuffleDeck] = useState(() => {
     return generateShuffleDeck(assets.length, currentIndex);
   });
@@ -100,6 +150,57 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     try { localStorage.setItem('immich_video_muted', String(isVideoMuted)); } catch { /* ignore */ }
   }, [isVideoMuted]);
 
+  useEffect(() => {
+    try { localStorage.setItem('immich_auto_browser_fullscreen', String(autoBrowserFullscreen)); } catch { /* ignore */ }
+  }, [autoBrowserFullscreen]);
+
+  useEffect(() => {
+    try { localStorage.setItem('immich_keep_screen_awake', String(keepScreenAwake)); } catch { /* ignore */ }
+  }, [keepScreenAwake]);
+
+  // Sync native fullscreen state with browser changes
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsNativeFullscreen(isBrowserFullscreen());
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
+  }, []);
+
+  // Safe close handler: exits browser fullscreen and closes viewer
+  const handleClose = useCallback(() => {
+    exitBrowserFullscreen().catch(() => {});
+    onClose();
+  }, [onClose]);
+
+  // Mobile / Android hardware Back gesture support
+  useEffect(() => {
+    const stateKey = 'immich_viewer_' + Date.now();
+    try {
+      window.history.pushState({ immichModal: stateKey }, '');
+    } catch {
+      /* ignore */
+    }
+
+    const handlePopState = () => {
+      exitBrowserFullscreen().catch(() => {});
+      onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (window.history.state?.immichModal === stateKey) {
+        window.history.back();
+      }
+    };
+  }, [onClose]);
+
   const toggleShuffle = useCallback(() => {
     setIsShuffle(prev => {
       const nextVal = !prev;
@@ -111,6 +212,10 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       return nextVal;
     });
   }, [assets.length, index]);
+
+  const handleToggleFullscreen = useCallback(() => {
+    toggleBrowserFullscreen().catch(() => {});
+  }, []);
 
   // Preload nearby images (preview size — the current asset alone uses full size)
   useEffect(() => {
@@ -240,13 +345,14 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (isInput) return;
 
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleClose();
       else if (e.key === 'ArrowLeft') goToPrevious();
       else if (e.key === 'ArrowRight') goToNext();
       else if (e.key === 'ArrowDown') handleDownload();
       else if (e.key === 'i' || e.key === 'I') setShowInfo(prev => !prev);
       else if (e.key === 's' || e.key === 'S') toggleShuffle();
       else if (e.key === 'm' || e.key === 'M') setIsVideoMuted(prev => !prev);
+      else if (e.key === 'f' || e.key === 'F') handleToggleFullscreen();
       else if (e.key === ' ') {
         if (target && target.tagName === 'VIDEO') return;
         e.preventDefault();
@@ -260,7 +366,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
       document.removeEventListener('keydown', handleKeyboard);
       document.body.style.overflow = 'auto';
     };
-  }, [onClose, goToPrevious, goToNext, handleDownload, toggleAutoSlide, toggleShuffle]);
+  }, [handleClose, goToPrevious, goToNext, handleDownload, toggleAutoSlide, toggleShuffle, handleToggleFullscreen]);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length !== 1) return;
@@ -308,9 +414,9 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
     if (dy > 140 || sy > 0.85) {
       handleDownload();
     } else if (dy < -140 || sy < -0.85) {
-      onClose();
+      handleClose();
     }
-  }, [goToPrevious, goToNext, handleDownload, onClose]);
+  }, [goToPrevious, goToNext, handleDownload, handleClose]);
 
   const date = new Date(asset.createdAt);
   const canGoPrevious = isShuffle ? deckPointer > 0 : index > 0;
@@ -336,6 +442,16 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
               </span>
             )}
           </div>
+
+          {isWakeLockActive && (
+            <div 
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 border border-amber-500/30 rounded-full text-[11px] font-medium text-amber-300"
+              title="Screen Wake Lock is active: display will remain awake"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>Awake</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -363,8 +479,15 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
             {autoSlide ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </button>
           <button 
+            onClick={handleToggleFullscreen}
+            title={isNativeFullscreen ? 'Exit browser fullscreen (F)' : 'Enter browser fullscreen (F)'}
+            className={`p-2 rounded-full transition-colors ${isNativeFullscreen ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
+          >
+            {isNativeFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+          </button>
+          <button 
             onClick={() => setShowSlideSettings(!showSlideSettings)}
-            title="Slideshow settings"
+            title="Viewer & Slideshow settings"
             className={`p-2 rounded-full transition-colors ${showSlideSettings ? 'bg-immich-primary text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
           >
             <SlidersHorizontal className="w-5 h-5" />
@@ -384,7 +507,7 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
             <Info className="w-5 h-5" />
           </button>
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             title="Close (Esc)"
             className="p-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
           >
@@ -393,23 +516,23 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
         </div>
       </div>
 
-      {/* Slideshow Settings Panel */}
+      {/* Slideshow & Viewer Settings Panel */}
       <AnimatePresence>
         {showSlideSettings && (
           <Motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            className="absolute top-20 right-4 z-[70] w-80 rounded-2xl border border-white/10 bg-black/90 backdrop-blur-2xl p-5 space-y-5 shadow-2xl"
+            className="absolute top-20 right-4 z-[70] w-80 max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/90 backdrop-blur-2xl p-5 space-y-5 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white/90 flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-immich-primary" /> Slideshow
+                <SlidersHorizontal className="w-4 h-4 text-immich-primary" /> Viewer Settings
               </h3>
               <button
                 onClick={() => setShowSlideSettings(false)}
                 className="p-1.5 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-full transition-colors"
-                aria-label="Close slideshow settings"
+                aria-label="Close viewer settings"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -537,6 +660,57 @@ function FullscreenViewer({ assets, currentIndex, apiKey, onClose, onNavigate })
                     className="accent-immich-primary"
                   />
                   <span className="text-xs text-white/80">Slide after interval (same as images)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Device & Screen section */}
+            <div className="space-y-2 border-t border-white/10 pt-4">
+              <label className="text-xs font-semibold text-white/70 block">Device & Screen</label>
+              <div className="space-y-2">
+                <label className="flex items-center justify-between gap-3 p-2 rounded-lg border border-white/10 bg-white/[0.03]">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-xs font-semibold text-white/80">Keep Screen Awake</span>
+                    </div>
+                    <p className="text-[10px] text-white/40 mt-0.5">
+                      {!isWakeLockSupported 
+                        ? 'Not supported by this browser' 
+                        : isWakeLockActive 
+                          ? 'Screen stays on while viewer is open' 
+                          : 'Screen turns off after device sleep timeout'}
+                    </p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={keepScreenAwake}
+                    disabled={!isWakeLockSupported}
+                    onClick={() => setKeepScreenAwake(prev => !prev)}
+                    className={`relative h-6 w-11 rounded-full transition-colors flex-none disabled:opacity-40 ${keepScreenAwake && isWakeLockSupported ? 'bg-immich-primary' : 'bg-white/15'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${keepScreenAwake && isWakeLockSupported ? 'translate-x-5' : ''}`} />
+                  </button>
+                </label>
+
+                <label className="flex items-center justify-between gap-3 p-2 rounded-lg border border-white/10 bg-white/[0.03]">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-3.5 h-3.5 text-immich-primary" />
+                      <span className="text-xs font-semibold text-white/80">Auto Fullscreen (Mobile)</span>
+                    </div>
+                    <p className="text-[10px] text-white/40 mt-0.5">
+                      Open browser fullscreen when tapping photos
+                    </p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={autoBrowserFullscreen}
+                    onClick={() => setAutoBrowserFullscreen(prev => !prev)}
+                    className={`relative h-6 w-11 rounded-full transition-colors flex-none ${autoBrowserFullscreen ? 'bg-immich-primary' : 'bg-white/15'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoBrowserFullscreen ? 'translate-x-5' : ''}`} />
+                  </button>
                 </label>
               </div>
             </div>
