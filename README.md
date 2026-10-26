@@ -6,65 +6,85 @@ Repository: [ImmichAltViewer](https://github.com/enzomtpYT/ImmichAltViewer)
 
 > [!CAUTION]
 > **⚠️ VIBECODED WARNING**
-> This project was "vibecoded" (generated largely by AI). While it looks great and works well, it may contain weird bugs, unoptimized patterns, or security risks. **Use at your own risk.** Do not expose this publicly to the internet without proper authentication/security layers (like a VPN or Authelia).
+> This project was originally vibecoded. While fast, sleek, and feature-rich, it connects directly to your Immich PostgreSQL database and streams media via proxy. **Use at your own risk.** Do not expose this publicly to the internet without proper authentication/security layers (such as a VPN, Authelia, or Cloudflare Access).
+
+---
 
 ## ✨ Features
 
-*   **📅 Sort by Date Uploaded**: The missing feature from the official web UI. See your most recently uploaded photos first, regardless of when they were taken.
+*   **📅 Sort by Date Uploaded**: The missing view from the official Immich web UI. See recently added photos first, regardless of when they were taken.
+*   **🔖 Multi-Album Bookmarks**: Save multiple album UUIDs with custom names. Toggle individual albums or select all to view a unified multi-album timeline with color-coded badges.
+*   **🔍 Search & Filters**: Instant filename and asset ID filtering with quick toggles for All, Photos, or Videos.
 *   **🚀 High Performance**: 
-    *   Virtual scrolling (handles 10,000+ items smoothly).
-    *   Aggressive caching & preloading.
-    *   Instant navigation in fullscreen.
-*   **🎨 Premium UI**: Dark mode with "Glassmorphism" aesthetics, smooth animations, and a responsive grid.
-*   **⏱️ Timeline Scrubber**: Quickly jump to specific dates using the interactive timeline on the right.
-*   **📱 Responsive**: Works great on desktop and mobile.
+    *   Virtual scrolling via `@tanstack/react-virtual` handling thousands of assets smoothly.
+    *   In-memory LRU cache with TTL for album asset queries.
+    *   Chunked proxy streaming for thumbnails, previews, original full-size photos, and videos with HTTP byte-range seek support.
+*   **🎨 Premium UI**: Dark mode glassmorphism aesthetics, responsive multi-column masonry grid, and smooth animations.
+*   **⏱️ Timeline Scrubber**: Interactive virtualized date timeline rail (desktop side panel and mobile slide-up sheet) to jump directly to any date.
+*   **🎬 Fullscreen Slideshow**:
+    *   Configurable intervals (3s, 5s, 10s, 15s, 30s, or custom duration).
+    *   Forward or backward playback directions.
+    *   Video advance options (advance immediately after video ends or follow the timer).
+*   **⌨️ Keyboard Shortcuts & Touch Gestures**:
+    *   `?` toggle shortcut help dialog.
+    *   `Space` start / pause slideshow.
+    *   `←` / `→` navigate assets.
+    *   `↓` download current asset.
+    *   `i` toggle EXIF and file details panel.
+    *   Mobile touch gestures: swipe left/right to navigate, swipe down to download, swipe up to close.
+
+---
 
 ## 🛠️ Deployment
 
 ### 🐳 Docker (Recommended)
 
-1.  Clone the repo.
-2.  Edit `.env` (or `docker-compose.yml`) with your Immich details:
+1. Clone the repo.
+2. Edit `.env` with your Immich instance details:
     ```env
     IMMICH_URL=http://your-immich-ip:2283
-    DATABASE_URL=postgresql://immich:pass@your-immich-ip:5432/immich
+    DATABASE_URL=postgresql://immich:yourpassword@your-immich-ip:5432/immich
+    # Optional: restrict CORS origins (comma-separated, default is *)
+    # CORS_ORIGINS=http://localhost:5173,https://photos.example.com
     ```
-3.  Run:
+3. Run:
     ```bash
     docker-compose up -d
     ```
-    Access at `http://localhost:8090`
+    Access the viewer at `http://localhost:8090`.
 
 ### 🖥️ Proxmox LXC "Addon"
 
-Easily install on a standard Debian/Ubuntu LXC container:
+Install directly on a standard Debian/Ubuntu LXC container:
 
-1.  Copy the `install_immich_viewer.sh` script to your container.
-2.  Run it:
+1. Copy `install_immich_viewer.sh` to your container.
+2. Run:
     ```bash
     chmod +x install_immich_viewer.sh
     ./install_immich_viewer.sh
     ```
-3.  Follow the prompts.
+3. Edit the generated `/opt/immich-viewer/.env` with your Immich database credentials and restart the service (`systemctl restart immich-viewer`).
 
 ### 💻 Local Development
 
-1.  **Backend**:
+1. **Backend**:
     ```bash
     cd back
     python -m venv venv
-    ./venv/Scripts/activate
+    ./venv/Scripts/activate  # On Linux/macOS: source venv/bin/activate
     pip install -r requirements.txt
     fastapi dev main.py
     ```
-2.  **Frontend**:
+2. **Frontend**:
     ```bash
     cd front-react
     npm install
     npm run dev
     ```
 
-## ⚙️ Configuration
+---
+
+## ⚙️ Configuration Reference
 
 Create a `.env` file in the root directory:
 
@@ -72,14 +92,19 @@ Create a `.env` file in the root directory:
 # URL to your Immich Server
 IMMICH_URL=http://your-immich-ip:2283
 
-# Connection string to Immich's Postgres Database
-# (Needed to fetch Date Uploaded, which isn't in the API yet)
+# Direct connection string to Immich's Postgres Database
+# (Required to fetch upload timestamps, bypassing API limitations)
 DATABASE_URL=postgresql://immich:yourpassword@your-immich-ip:5432/immich
+
+# Optional: Allowed CORS origins (comma-separated). Default is '*'
+# CORS_ORIGINS=http://localhost:5173,https://photos.example.com
 ```
+
+---
 
 ## 🌐 Reverse Proxy Subpath Setup (e.g., `photos.example.com/cim`)
 
-The frontend assets use relative pathing (`base: './'`), making it easy to serve behind a subpath reverse proxy.
+The frontend assets use relative pathing (`base: './'`), allowing seamless hosting behind a subpath reverse proxy.
 
 ### Nginx Example
 ```nginx
@@ -100,3 +125,9 @@ photos.example.com {
     }
 }
 ```
+
+---
+
+## 🤖 AI Agent Guidelines
+
+For AI coding assistants (Claude, Gemini, GitHub Copilot, Cursor), refer to [agents.md](file:///agents.md) (also hardlinked to `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`).

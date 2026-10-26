@@ -121,6 +121,11 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/albums/{album_id}/assets")
 async def get_album_assets(album_id: str):
+    try:
+        UUID(album_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid album UUID format")
+
     # Check cache first (with TTL + LRU eviction)
     cached = cache_get(album_id)
     if cached is not None:
@@ -473,4 +478,3 @@ else:
     @app.get("/")
     def read_root():
         return {"message": f"Backend is running. Frontend (dist) not found at {frontend_dir}. Build it with 'npm run build' in the frontend directory."}
-

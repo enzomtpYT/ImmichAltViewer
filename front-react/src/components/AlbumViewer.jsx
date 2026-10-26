@@ -276,7 +276,7 @@ function AlbumViewer() {
     }
   }, [dateToIndex]);
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key !== 'Enter') return;
 
     if (selectedAlbumIds.length > 1) {
@@ -445,7 +445,7 @@ function AlbumViewer() {
                 placeholder="Paste key here"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
               />
             </div>
@@ -456,7 +456,7 @@ function AlbumViewer() {
                 placeholder="Enter ID"
                 value={albumId}
                 onChange={(e) => setAlbumId(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors"
               />
             </div>
@@ -489,7 +489,7 @@ function AlbumViewer() {
                   placeholder="Bookmark name (optional)"
                   value={albumName}
                   onChange={(e) => setAlbumName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && saveCurrentAlbum()}
+                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentAlbum()}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-immich-primary/50 transition-colors text-white"
                 />
                 <button
@@ -680,7 +680,7 @@ function AlbumViewer() {
                   </button>
                 </div>
                 <DateSlider
-                  assets={allAssets}
+                  assets={filteredAssets}
                   onDateSelect={handleDateSelect}
                   compact
                   onClose={() => setShowMobileTimeline(false)}

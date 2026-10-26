@@ -8,10 +8,6 @@ set -e
 # Configuration
 INSTALL_DIR="/opt/immich-viewer"
 REPO_URL="https://github.com/enzomtpYT/ImmichAltViewer.git" # Replace if this is a real public repo, otherwise we assume local copy or user provides it. 
-# Since we are generating this for the user to use LOCALLY likely, I will assume they might want to download the current state or clone. 
-# For now, I will assume they might copy this script into the project root or curl it.
-# If this is to be a standalone downloader, we need a valid git URL.
-# I will make it assume the current directory IS the project if .git exists, otherwise clone.
 
 APP_USER="root" # LXC containers often run as root, but we can create a user if preferred. Keeping root for "addon" simplicity unless requested otherwise.
 
@@ -102,8 +98,6 @@ else
 fi
 
 echo "Building frontend..."
-# Ensure API_URL is empty for production build if not already handled by code changes
-# The current code uses API_URL='' for production relative path, which is good.
 npm run build
 
 cd ..
