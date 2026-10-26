@@ -11,6 +11,11 @@ The project is split into two primary layers:
 1. **Backend (`/back`)**:
    - **Framework**: FastAPI (Python 3.11+) with Uvicorn.
    - **Database**: PostgreSQL (direct connection to Immich's Postgres instance using `asyncpg`).
+   - **Endpoints**:
+     - `GET /library/assets`: Direct database query for all non-deleted assets across the entire library ordered by `createdAt DESC` (upload date).
+     - `GET /albums/{album_id}/assets`: Single album query ordered by `createdAt DESC`.
+     - `GET /albums/assets?ids=...`: Combined multi-album query.
+     - `GET /proxy/*`: Streaming proxy endpoints with chunked transfer and HTTP range seek support for videos.
    - **Proxy Engine**: `httpx.AsyncClient` streaming media from Immich's REST endpoints (`/api/assets/{id}/thumbnail`, `/original`, `/video/playback`).
    - **Caching**: In-memory LRU cache (`asset_cache`) with a 60-second TTL and 500-entry capacity.
    - **Static Serving**: Production build of the frontend (`/front-react/dist`) is mounted at `/` when available.
@@ -19,8 +24,9 @@ The project is split into two primary layers:
    - **Framework**: React 19 + Vite 7.
    - **Styling**: Tailwind CSS + PostCSS (dark mode, glassmorphism theme).
    - **Virtualization**: `@tanstack/react-virtual` for virtualized infinite grid rendering and timeline scrubber.
+   - **Slideshow & Shuffle**: Fullscreen slideshow with Fisher-Yates non-repeating shuffle deck, backward/forward navigation memory, configurable interval/directions, and video autoplay controls.
    - **Animations & Icons**: `framer-motion`, `lucide-react`.
-   - **Persistence**: Browser `localStorage` holds the user's Immich API key, album UUID, and bookmarked albums.
+   - **Persistence**: Browser `localStorage` holds the user's Immich API key, browse mode (`library` vs `albums`), album UUIDs, bookmarks, and slideshow preferences.
 
 ---
 
